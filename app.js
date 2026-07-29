@@ -111,7 +111,7 @@ function restoreSession() {
 function resetRoute(options = {}) {
   state.session = null;
   saveSession();
-  $("#steps").innerHTML = '<div class="empty-state">Tekan Start Checkpoint untuk mulakan route.</div>';
+  $("#steps").innerHTML = '<div class="empty-state">Press Start Checkpoint to begin your route.</div>';
   $("#keyBox").classList.add("hidden");
   $("#routeState").textContent = "Ready";
   $("#startBtn").innerHTML = '<span>▶</span> Start Checkpoint';
@@ -180,7 +180,7 @@ async function startRoute() {
     $("#routeState").textContent = "In Progress";
     $("#startBtn").innerHTML = '<span>↻</span> Route Started';
     renderSteps();
-    setMessage(data.resumed ? "Route aktif lama disambung semula." : "Route dimulakan. Tekan Open pada checkpoint pertama.", true);
+    setMessage(data.resumed ? "Your previous active route has been resumed." : "Route started. Press Open on the first checkpoint.", true);
   } catch (error) {
     setMessage(error.message);
   } finally {
@@ -197,7 +197,7 @@ function renderSteps() {
     const current = state.session && Number(state.session.completedSteps) + 1 === step;
     return `<div class="step ${done ? "done" : ""}">
       <div class="step-index">${done ? "✓" : step}</div>
-      <div><strong>Checkpoint ${step}</strong><small>${done ? "Verified" : current ? "Provider akan kembali secara automatik" : "Selesaikan checkpoint sebelumnya"}</small></div>
+      <div><strong>Checkpoint ${step}</strong><small>${done ? "Verified" : current ? "The provider will return you automatically" : "Complete the previous checkpoint first"}</small></div>
       <button data-step="${step}" ${!current || done ? "disabled" : ""}>${done ? "Done" : "Open"}</button>
     </div>`;
   }).join("");
@@ -209,7 +209,7 @@ function renderSteps() {
 async function openCheckpoint(step) {
   if (state.busy || !state.session) return;
   state.busy = true;
-  setMessage("Menyediakan checkpoint...", true);
+  setMessage("Preparing checkpoint...", true);
   updateControls();
   try {
     const data = await api("/api/session/link", {
@@ -226,7 +226,7 @@ async function openCheckpoint(step) {
   } catch (error) {
     if (isDeadSessionError(error)) {
       resetRoute({ keepMessage: true });
-      setMessage("Session sudah tamat atau tidak lagi wujud. Pilih route baharu.");
+      setMessage("This session has expired or no longer exists. Choose a new route.");
     } else {
       setMessage(error.message);
     }
@@ -256,7 +256,7 @@ async function refreshSession() {
   } catch (error) {
     if (isDeadSessionError(error)) {
       resetRoute({ keepMessage: true });
-      setMessage("Session tamat secara automatik. Kau boleh pilih plan baharu.");
+      setMessage("The session expired automatically. You can choose a new plan.");
       return null;
     }
     throw error;
@@ -271,7 +271,7 @@ async function pollAfterReturn() {
     if (!data || data.completedSteps >= data.requiredSteps || data.completedSteps > before) return;
     await new Promise((resolve) => setTimeout(resolve, 2000));
   }
-  setMessage("Pengesahan provider masih diproses. Tekan checkpoint semula selepas beberapa saat.");
+  setMessage("Provider verification is still processing. Try the checkpoint again in a few seconds.");
 }
 
 async function issueKey() {
@@ -284,7 +284,7 @@ async function issueKey() {
   $("#keyBox").classList.remove("hidden");
   $("#routeState").textContent = "Unlocked";
   $("#startBtn").innerHTML = '<span>＋</span> Start Another Route';
-  setMessage("Access key berjaya dijana.", true);
+  setMessage("Your access key has been generated successfully.", true);
   state.session = null;
   saveSession();
   updateControls();
@@ -292,7 +292,7 @@ async function issueKey() {
 
 async function cancelRoute() {
   if (state.busy || !state.session) return;
-  const confirmed = window.confirm(`Batalkan route ${state.plan} melalui ${providerLabel()}? Semua progress checkpoint untuk session ini akan hilang.`);
+  const confirmed = window.confirm(`Cancel the ${state.plan} route through ${providerLabel()}? All checkpoint progress for this session will be lost.`);
   if (!confirmed) return;
 
   state.busy = true;
@@ -303,11 +303,11 @@ async function cancelRoute() {
       body: { sessionId: state.session.sessionId, clientToken: state.clientToken }
     });
     resetRoute({ keepMessage: true });
-    setMessage("Route dibatalkan. Kau boleh pilih plan dan provider baharu.", true);
+    setMessage("Route cancelled. You can choose a new plan and provider.", true);
   } catch (error) {
     if (isDeadSessionError(error)) {
       resetRoute({ keepMessage: true });
-      setMessage("Session lama sudah tamat. Kau boleh pilih route baharu.", true);
+      setMessage("The previous session has expired. You can choose a new route.", true);
     } else {
       setMessage(error.message);
     }
@@ -339,7 +339,7 @@ $("#copyBtn").addEventListener("click", async () => {
     $("#copyBtn").textContent = "Copied";
     setTimeout(() => { $("#copyBtn").textContent = "Copy"; }, 1500);
   } catch {
-    setMessage("Clipboard permission disekat.");
+    setMessage("Clipboard permission was blocked.");
   }
 });
 
@@ -367,7 +367,7 @@ $("#manualSupportLink").href = config.supportUrl;
   } catch (error) {
     if (isDeadSessionError(error)) {
       resetRoute({ keepMessage: true });
-      setMessage("Session lama sudah tamat. Pilih route baharu.");
+      setMessage("The previous session has expired. Choose a new route.");
     } else {
       setMessage(error.message);
     }
