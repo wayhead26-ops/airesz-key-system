@@ -45,7 +45,7 @@ function setMessage(text = "", ok = false) {
 }
 
 function providerLabel() {
-  const labels = { linkvertise: "Linkvertise", lootlabs: "LootLabs", workink: "Work.ink" };
+  const labels = { linkvertise: "Linkvertise", workink: "Work.ink" };
   return labels[state.provider] || state.provider;
 }
 
@@ -363,7 +363,6 @@ $("#manualSupportLink").href = config.supportUrl;
       else await refreshSession();
     }
     if (params.get("error")) setMessage(params.get("error"));
-    else if (params.get("checkpoint") === "waiting") setMessage("Menunggu pengesahan LootLabs...", true);
     history.replaceState({}, "", location.pathname + location.hash);
   } catch (error) {
     if (isDeadSessionError(error)) {
