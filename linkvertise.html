@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Airesz · Linkvertise Checkpoint</title>
+  <link rel="stylesheet" href="styles.css">
+
+  <!--
+    PASTE THE EXACT LINKVERTISE FULL SCRIPT TAG FROM YOUR LINKVERTISE DASHBOARD BELOW.
+    Do not paste passwords or API keys here. The Full Script tag is intended for websites.
+  -->
+  <!-- LINKVERTISE FULL SCRIPT START -->
+  <!-- PASTE HERE -->
+  <!-- LINKVERTISE FULL SCRIPT END -->
+</head>
+<body>
+  <main class="linkvertise-bridge shell">
+    <article class="builder-card bridge-card">
+      <div class="mini-brand"><img src="assets/airesz-mark.png" alt=""><div><strong>AIRESZ</strong><span>LINKVERTISE CHECKPOINT</span></div></div>
+      <h1>Continue through Linkvertise</h1>
+      <p>Tekan butang di bawah. Selepas task selesai, kau akan kembali ke key system secara automatik.</p>
+      <a id="continueLink" class="primary-button" rel="nofollow">Continue Checkpoint</a>
+      <p id="bridgeMessage" class="message"></p>
+    </article>
+  </main>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const target = params.get("target");
+    const link = document.getElementById("continueLink");
+    const message = document.getElementById("bridgeMessage");
+    try {
+      const url = new URL(target);
+      if (url.protocol !== "https:" || !url.pathname.includes("/api/provider/linkvertise/callback")) throw new Error();
+      link.href = url.toString();
+    } catch {
+      link.removeAttribute("href");
+      link.setAttribute("aria-disabled", "true");
+      message.textContent = "Invalid checkpoint target.";
+    }
+  </script>
+</body>
+</html>

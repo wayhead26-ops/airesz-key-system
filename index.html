@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#080511">
+  <meta name="description" content="Airesz free script key system with Linkvertise, LootLabs and Work.ink checkpoints.">
+  <title>Airesz Free Script Key System</title>
+  <link rel="icon" href="assets/airesz-mark.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="page-glow glow-a"></div>
+  <div class="page-glow glow-b"></div>
+  <div class="grid-overlay"></div>
+
+  <header class="topbar shell">
+    <a class="brand" href="#home" aria-label="Airesz home">
+      <img src="assets/airesz-mark.png" alt="Airesz logo">
+      <span><strong>AIRESZ</strong><small>FREE KEY SYSTEM</small></span>
+    </a>
+    <nav aria-label="Main navigation">
+      <a href="#home">Home</a>
+      <a class="active" href="#get-key">Get Key</a>
+      <a href="#how-it-works">How It Works</a>
+      <a href="#status">Status</a>
+    </nav>
+    <a id="supportLink" class="support-button" target="_blank" rel="noopener noreferrer">
+      <span class="status-dot"></span> Discord Support
+    </a>
+  </header>
+
+  <main>
+    <section id="home" class="hero shell">
+      <div class="hero-copy">
+        <div class="pill"><span>✦</span> Fast · Secure · Free</div>
+        <h1>Free script key access, <span>made simple.</span></h1>
+        <p>Pilih tempoh key, pilih provider, lengkapkan checkpoint dan dapatkan key untuk script Airesz.</p>
+        <div class="hero-badges">
+          <article><span>🛡</span><div><strong>HWID Protected</strong><small>Satu key untuk satu peranti</small></div></article>
+          <article><span>⚡</span><div><strong>Instant Access</strong><small>Key dijana selepas checkpoint</small></div></article>
+          <article><span>☁</span><div><strong>Cloud Verified</strong><small>Cloudflare Worker + D1</small></div></article>
+        </div>
+      </div>
+      <div class="hero-mark" aria-hidden="true">
+        <div class="mark-ring ring-one"></div>
+        <div class="mark-ring ring-two"></div>
+        <img src="assets/airesz-mark.png" alt="">
+      </div>
+    </section>
+
+    <section id="get-key" class="key-builder shell">
+      <article class="builder-card">
+        <div class="card-heading">
+          <span class="heading-icon">♛</span>
+          <div><h2>Choose Your Access Plan</h2><p>Pilih berapa lama kau perlukan akses.</p></div>
+        </div>
+
+        <div class="plans" role="group" aria-label="Access duration">
+          <button class="plan active" data-plan="24H" type="button">
+            <span class="plan-check">✓</span><span class="plan-icon">◷</span><strong>24 Hours</strong><small>1 checkpoint</small>
+          </button>
+          <button class="plan" data-plan="48H" type="button">
+            <span class="plan-check">✓</span><span class="plan-icon">◷</span><strong>48 Hours</strong><small>2 checkpoints</small>
+          </button>
+          <button class="plan" data-plan="72H" type="button">
+            <span class="plan-check">✓</span><span class="plan-icon">◷</span><strong>72 Hours</strong><small>3 checkpoints</small>
+          </button>
+        </div>
+
+        <div class="card-heading provider-heading">
+          <span class="heading-icon">🔗</span>
+          <div><h2>Select a Provider</h2><p>Provider yang sama digunakan untuk semua checkpoint.</p></div>
+        </div>
+
+        <div class="providers" role="group" aria-label="Checkpoint provider">
+          <button class="provider active" data-provider="linkvertise" type="button">
+            <span class="provider-logo lv">L</span><span><strong>Linkvertise</strong><small>Popular route</small></span><i></i>
+          </button>
+          <button class="provider" data-provider="lootlabs" type="button">
+            <span class="provider-logo ll">⚗</span><span><strong>LootLabs</strong><small>Quick access</small></span><i></i>
+          </button>
+          <button class="provider" data-provider="workink" type="button">
+            <span class="provider-logo wi">W</span><span><strong>Work.ink</strong><small>Alternative route</small></span><i></i>
+          </button>
+        </div>
+
+        <div class="progress-section">
+          <div class="progress-title"><div><span class="heading-icon small">◎</span><strong>Checkpoint Progress</strong></div><span id="progressText">Progress 0/1</span></div>
+          <div class="progress-track"><span id="progressBar"></span></div>
+          <div id="steps" class="steps"><div class="empty-state">Tekan Start Checkpoint untuk mulakan route.</div></div>
+        </div>
+
+        <div class="builder-actions">
+          <button id="startBtn" class="primary-button" type="button"><span>▶</span> Start Checkpoint</button>
+          <span id="routeState" class="route-state">Ready</span>
+        </div>
+        <p id="message" class="message" aria-live="polite"></p>
+
+        <div id="keyBox" class="key-box hidden">
+          <div><span>YOUR ACCESS KEY</span><small id="expiryText"></small></div>
+          <div class="key-row"><code id="keyOutput"></code><button id="copyBtn" type="button">Copy</button></div>
+        </div>
+      </article>
+
+      <aside class="info-card">
+        <div class="mini-brand"><img src="assets/airesz-mark.png" alt=""><div><strong>AIRESZ</strong><span>ACCESS GATEWAY</span></div></div>
+        <h2 id="routeTitle">24 hours · Linkvertise</h2>
+        <p>Lengkapkan checkpoint mengikut urutan. Provider akan kembali ke halaman ini secara automatik.</p>
+        <div class="route-summary">
+          <div><span>Selected Plan</span><strong id="summaryPlan">24 Hours</strong></div>
+          <div><span>Provider</span><strong id="summaryProvider">Linkvertise</strong></div>
+          <div><span>Required</span><strong id="summarySteps">1 Checkpoint</strong></div>
+        </div>
+        <div class="manual-sale">
+          <span>💎</span><div><strong>Need a Lifetime Key?</strong><p>Hubungi admin melalui Discord untuk beli key manual.</p></div>
+        </div>
+        <a id="manualSupportLink" class="secondary-button" target="_blank" rel="noopener noreferrer">Contact Admin</a>
+      </aside>
+    </section>
+
+    <section id="how-it-works" class="how shell">
+      <div class="section-label">HOW IT WORKS</div>
+      <h2>Empat langkah sahaja</h2>
+      <div class="how-grid">
+        <article><span>1</span><strong>Pilih Tempoh</strong><p>24, 48 atau 72 jam.</p></article>
+        <article><span>2</span><strong>Pilih Provider</strong><p>Linkvertise, LootLabs atau Work.ink.</p></article>
+        <article><span>3</span><strong>Selesaikan Checkpoint</strong><p>Ikut checkpoint satu demi satu.</p></article>
+        <article><span>4</span><strong>Dapatkan Key</strong><p>Copy key dan masukkan dalam script.</p></article>
+      </div>
+    </section>
+
+    <section id="status" class="status-strip shell">
+      <div><span class="status-dot"></span><strong>System Online</strong><small>Cloudflare API tersedia</small></div>
+      <div><strong>3</strong><small>Checkpoint providers</small></div>
+      <div><strong>24/7</strong><small>Key verification</small></div>
+      <div><strong>HWID</strong><small>Device protection</small></div>
+    </section>
+  </main>
+
+  <footer class="shell"><span>© 2026 Airesz. All rights reserved.</span><span>GitHub Pages · Cloudflare Workers · Discord Analytics</span></footer>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
