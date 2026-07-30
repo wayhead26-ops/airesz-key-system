@@ -1,5 +1,5 @@
 --[[
-    Airesz Key System GUI v1.3 (Close After Verify)
+    Airesz Key System GUI v1.4 (Auto Login)
     Uses the existing Airesz v3.7.1 authorization client.
 
     Public client:
@@ -62,6 +62,8 @@ ScreenGui.Name = "AireszKeySystem"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+-- Keep the GUI hidden while a saved key is checked.
+ScreenGui.Enabled = false
 ScreenGui.Parent = guiParent
 
 local Dim = Instance.new("Frame")
@@ -456,10 +458,7 @@ local function loadSavedKey()
         end
     end
 
-    if key ~= "" then
-        KeyBox.Text = key
-        setStatus("Saved key loaded automatically", "idle")
-    end
+    return key
 end
 
 local function setVerifyBusy(value)
@@ -470,22 +469,54 @@ local function setVerifyBusy(value)
     VerifyButton.BackgroundTransparency = value and 0.18 or 0
 end
 
-local function verifyAndLoad()
+local function showKeyGui(message, state)
+    if not ScreenGui or not ScreenGui.Parent then
+        return
+    end
+
+    ScreenGui.Enabled = true
+    Main.Visible = true
+    setVerifyBusy(false)
+
+    if message then
+        setStatus(message, state or "idle")
+    end
+
+    -- Entry animation only when the GUI actually needs to be shown.
+    Main.Size = UDim2.fromOffset(430, 230)
+    Main.BackgroundTransparency = 1
+    Dim.BackgroundTransparency = 1
+
+    TweenService:Create(Dim, TweenInfo.new(0.25), {
+        BackgroundTransparency = 0.45
+    }):Play()
+
+    TweenService:Create(Main, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Size = UDim2.fromOffset(430, 270),
+        BackgroundTransparency = 0
+    }):Play()
+end
+
+local function verifyAndLoad(keyOverride, silentSavedKey)
     if verifying then
         return
     end
 
-    local key = KeyBox.Text:gsub("^%s+", ""):gsub("%s+$", "")
+    local key = trim(keyOverride or KeyBox.Text)
     if key == "" then
-        setStatus("Please enter your key", "error")
+        showKeyGui("Please enter your key", "error")
         notify("Airesz Key System", "Enter a valid key first.")
         return
     end
 
     setVerifyBusy(true)
-    setStatus("Connecting to authorization server...", "loading")
+    if not silentSavedKey then
+        setStatus("Connecting to authorization server...", "loading")
+    end
 
     task.spawn(function()
+        local verified = false
+
         local ok, err = pcall(function()
             local cacheBuster = tostring(os.time()) .. tostring(math.random(1000, 9999))
             local source = game:HttpGet(AUTH_CLIENT_URL .. "?v=" .. cacheBuster, true)
@@ -506,13 +537,15 @@ local function verifyAndLoad()
                 error("roblox-client.lua must end with: return startAireszSession")
             end
 
-            setStatus("Checking key and device...", "loading")
+            if not silentSavedKey then
+                setStatus("Checking key and device...", "loading")
+            end
 
             local session, resultOrError = startAireszSession(key, function(reason)
                 warn("[AIRESZ] Access stopped:", reason)
                 if ScreenGui and ScreenGui.Parent then
-                    setStatus("Access stopped: " .. tostring(reason), "error")
-                    Main.Visible = true
+                    KeyBox.Text = ""
+                    showKeyGui("Access stopped: " .. tostring(reason), "error")
                 end
             end)
 
@@ -520,15 +553,20 @@ local function verifyAndLoad()
                 error(tostring(resultOrError or "Key verification failed."))
             end
 
+            verified = true
             currentSession = session
+
             local saved, saveMessage = saveKey(key)
             if not saved then
                 warn("[AIRESZ] Auto-save key failed:", saveMessage)
             end
 
-            -- Verification is complete here. Close the key GUI immediately,
-            -- then continue loading the private script in the background.
-            notify("Airesz Key System", "Key verified. Loading script...")
+            -- Key is valid. Close the hidden/visible key GUI immediately,
+            -- then load the private script in the background.
+            if not silentSavedKey then
+                notify("Airesz Key System", "Key verified. Loading script...")
+            end
+
             if ScreenGui and ScreenGui.Parent then
                 ScreenGui:Destroy()
             end
@@ -547,12 +585,18 @@ local function verifyAndLoad()
             local message = tostring(err)
             message = message:gsub("^.-:%d+:%s*", "")
 
-            if ScreenGui and ScreenGui.Parent then
-                setVerifyBusy(false)
-                setStatus(message, "error")
+            if silentSavedKey and not verified then
+                -- Prevent an invalid/expired saved key from causing an endless auto-login loop.
+                deleteSavedKey()
+                KeyBox.Text = ""
+                showKeyGui("Saved key is no longer valid. Enter a new key.", "error")
+                warn("[AIRESZ] Saved key verification failed:", message)
+                notify("Airesz Key System", "Saved key expired or invalid.")
+            elseif ScreenGui and ScreenGui.Parent then
+                showKeyGui(message, "error")
                 notify("Verification Failed", message)
             else
-                -- The key was already verified and the GUI was closed;
+                -- Verification succeeded and the GUI was already closed;
                 -- this means the private script failed while loading.
                 warn("[AIRESZ] Script load failed:", message)
                 notify("Script Load Failed", message)
@@ -579,10 +623,12 @@ GetKeyButton.MouseButton1Click:Connect(function()
     end
 end)
 
-VerifyButton.MouseButton1Click:Connect(verifyAndLoad)
+VerifyButton.MouseButton1Click:Connect(function()
+    verifyAndLoad(nil, false)
+end)
 KeyBox.FocusLost:Connect(function(enterPressed)
     if enterPressed then
-        verifyAndLoad()
+        verifyAndLoad(nil, false)
     end
 end)
 
@@ -685,15 +731,11 @@ do
     end)
 end
 
-loadSavedKey()
+local savedKey = loadSavedKey()
 
--- Entry animation.
-Main.Size = UDim2.fromOffset(430, 230)
-Main.BackgroundTransparency = 1
-TweenService:Create(Dim, TweenInfo.new(0.25), {
-    BackgroundTransparency = 0.45
-}):Play()
-TweenService:Create(Main, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-    Size = UDim2.fromOffset(430, 270),
-    BackgroundTransparency = 0
-}):Play()
+if savedKey ~= "" then
+    -- Valid saved key: no key GUI is shown; verify and load directly.
+    verifyAndLoad(savedKey, true)
+else
+    showKeyGui("Waiting for a key", "idle")
+end
