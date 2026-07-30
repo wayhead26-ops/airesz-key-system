@@ -1,5 +1,5 @@
 --[[
-    Airesz Key System GUI
+    Airesz Key System GUI v1.2 (Auto Save)
     Uses the existing Airesz v3.7.1 authorization client.
 
     Public client:
@@ -21,6 +21,7 @@ local StarterGui = game:GetService("StarterGui")
 local LocalPlayer = Players.LocalPlayer
 local KEY_FOLDER = "AireszHub"
 local KEY_FILE = KEY_FOLDER .. "/saved-key.txt"
+local FALLBACK_KEY_FILE = "AireszHub_saved-key.txt"
 
 local function notify(title, text)
     pcall(function()
@@ -77,7 +78,7 @@ Main.AnchorPoint = Vector2.new(0.5, 0.5)
 Main.BackgroundColor3 = Color3.fromRGB(16, 18, 27)
 Main.BorderSizePixel = 0
 Main.Position = UDim2.fromScale(0.5, 0.48)
-Main.Size = UDim2.fromOffset(430, 300)
+Main.Size = UDim2.fromOffset(430, 270)
 Main.ClipsDescendants = true
 Main.Parent = ScreenGui
 
@@ -261,54 +262,10 @@ ClearButton.TextColor3 = Color3.fromRGB(107, 114, 139)
 ClearButton.TextSize = 18
 ClearButton.Parent = InputHolder
 
-local RememberButton = Instance.new("TextButton")
-RememberButton.BackgroundTransparency = 1
-RememberButton.Position = UDim2.fromOffset(0, 87)
-RememberButton.Size = UDim2.fromOffset(150, 24)
-RememberButton.Text = ""
-RememberButton.Parent = Content
-
-local CheckBox = Instance.new("Frame")
-CheckBox.BackgroundColor3 = Color3.fromRGB(23, 26, 38)
-CheckBox.BorderSizePixel = 0
-CheckBox.Position = UDim2.fromOffset(0, 3)
-CheckBox.Size = UDim2.fromOffset(18, 18)
-CheckBox.Parent = RememberButton
-
-local CheckCorner = Instance.new("UICorner")
-CheckCorner.CornerRadius = UDim.new(0, 5)
-CheckCorner.Parent = CheckBox
-
-local CheckStroke = Instance.new("UIStroke")
-CheckStroke.Color = Color3.fromRGB(59, 65, 87)
-CheckStroke.Thickness = 1
-CheckStroke.Parent = CheckBox
-
-local CheckMark = Instance.new("TextLabel")
-CheckMark.BackgroundTransparency = 1
-CheckMark.Font = Enum.Font.GothamBold
-CheckMark.Size = UDim2.fromScale(1, 1)
-CheckMark.Text = "✓"
-CheckMark.TextColor3 = Color3.fromRGB(255, 255, 255)
-CheckMark.TextSize = 12
-CheckMark.Visible = false
-CheckMark.Parent = CheckBox
-
-local RememberText = Instance.new("TextLabel")
-RememberText.BackgroundTransparency = 1
-RememberText.Font = Enum.Font.Gotham
-RememberText.Position = UDim2.fromOffset(27, 0)
-RememberText.Size = UDim2.new(1, -27, 1, 0)
-RememberText.Text = "Remember key"
-RememberText.TextColor3 = Color3.fromRGB(147, 154, 180)
-RememberText.TextSize = 11
-RememberText.TextXAlignment = Enum.TextXAlignment.Left
-RememberText.Parent = RememberButton
-
 local StatusDot = Instance.new("Frame")
 StatusDot.BackgroundColor3 = Color3.fromRGB(124, 132, 157)
 StatusDot.BorderSizePixel = 0
-StatusDot.Position = UDim2.fromOffset(0, 125)
+StatusDot.Position = UDim2.fromOffset(0, 98)
 StatusDot.Size = UDim2.fromOffset(8, 8)
 StatusDot.Parent = Content
 
@@ -319,7 +276,7 @@ StatusCorner.Parent = StatusDot
 local Status = Instance.new("TextLabel")
 Status.BackgroundTransparency = 1
 Status.Font = Enum.Font.Gotham
-Status.Position = UDim2.fromOffset(15, 117)
+Status.Position = UDim2.fromOffset(15, 90)
 Status.Size = UDim2.new(1, -15, 0, 24)
 Status.Text = "Waiting for a key"
 Status.TextColor3 = Color3.fromRGB(135, 142, 166)
@@ -330,7 +287,7 @@ Status.Parent = Content
 
 local ButtonRow = Instance.new("Frame")
 ButtonRow.BackgroundTransparency = 1
-ButtonRow.Position = UDim2.fromOffset(0, 151)
+ButtonRow.Position = UDim2.fromOffset(0, 124)
 ButtonRow.Size = UDim2.new(1, 0, 0, 46)
 ButtonRow.Parent = Content
 
@@ -374,7 +331,6 @@ VerifyGradient.Color = ColorSequence.new({
 VerifyGradient.Rotation = 15
 VerifyGradient.Parent = VerifyButton
 
-local rememberKey = false
 local verifying = false
 local minimized = false
 local currentSession = nil
@@ -401,60 +357,108 @@ local function setStatus(text, state)
     }):Play()
 end
 
-local function setRemember(value)
-    rememberKey = value == true
-    CheckMark.Visible = rememberKey
-    TweenService:Create(CheckBox, TweenInfo.new(0.15), {
-        BackgroundColor3 = rememberKey and Color3.fromRGB(91, 103, 255)
-            or Color3.fromRGB(23, 26, 38)
-    }):Play()
-    TweenService:Create(CheckStroke, TweenInfo.new(0.15), {
-        Color = rememberKey and Color3.fromRGB(113, 125, 255)
-            or Color3.fromRGB(59, 65, 87)
-    }):Play()
+local function trim(text)
+    return tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+local function deleteSavedKey()
+    local deleted = false
+
+    if type(isfile) == "function" and type(delfile) == "function" then
+        for _, path in ipairs({KEY_FILE, FALLBACK_KEY_FILE}) do
+            local ok = pcall(function()
+                if isfile(path) then
+                    delfile(path)
+                    deleted = true
+                end
+            end)
+
+            if not ok then
+                -- Continue checking the fallback path.
+            end
+        end
+    end
+
+    local env = type(getgenv) == "function" and getgenv() or _G
+    env.AIRESZ_SAVED_KEY = nil
+    return deleted
 end
 
 local function saveKey(key)
-    if not rememberKey then
-        if type(isfile) == "function" and type(delfile) == "function" then
-            pcall(function()
-                if isfile(KEY_FILE) then
-                    delfile(KEY_FILE)
-                end
-            end)
-        end
-        return
+    key = trim(key)
+
+    if key == "" then
+        return false, "Enter a key before saving"
     end
+
+    -- Runtime fallback. This survives a GUI reopen in the same executor session,
+    -- even when the executor has no file API.
+    local env = type(getgenv) == "function" and getgenv() or _G
+    env.AIRESZ_SAVED_KEY = key
 
     if type(writefile) ~= "function" then
-        return
+        return false, "Executor does not support writefile"
     end
 
-    pcall(function()
-        if type(isfolder) == "function" and type(makefolder) == "function" then
+    local errors = {}
+
+    -- Preferred location: AireszHub/saved-key.txt
+    local folderReady = true
+    if type(isfolder) == "function" and type(makefolder) == "function" then
+        local ok, err = pcall(function()
             if not isfolder(KEY_FOLDER) then
                 makefolder(KEY_FOLDER)
             end
+        end)
+        folderReady = ok
+        if not ok then
+            table.insert(errors, tostring(err))
         end
-        writefile(KEY_FILE, key)
-    end)
+    elseif type(isfolder) ~= "function" or type(makefolder) ~= "function" then
+        folderReady = false
+    end
+
+    if folderReady then
+        local ok, err = pcall(writefile, KEY_FILE, key)
+        if ok then
+            return true, "Key saved"
+        end
+        table.insert(errors, tostring(err))
+    end
+
+    -- Fallback for executors that support writefile but not folders.
+    local ok, err = pcall(writefile, FALLBACK_KEY_FILE, key)
+    if ok then
+        return true, "Key saved"
+    end
+    table.insert(errors, tostring(err))
+
+    return false, "Could not save key: " .. table.concat(errors, " | ")
 end
 
 local function loadSavedKey()
-    if type(isfile) ~= "function" or type(readfile) ~= "function" then
-        return
+    local env = type(getgenv) == "function" and getgenv() or _G
+    local key = trim(env.AIRESZ_SAVED_KEY)
+
+    if key == "" and type(isfile) == "function" and type(readfile) == "function" then
+        for _, path in ipairs({KEY_FILE, FALLBACK_KEY_FILE}) do
+            local ok, result = pcall(function()
+                if isfile(path) then
+                    return readfile(path)
+                end
+            end)
+
+            result = trim(result)
+            if ok and result ~= "" then
+                key = result
+                break
+            end
+        end
     end
 
-    local ok, key = pcall(function()
-        if isfile(KEY_FILE) then
-            return readfile(KEY_FILE)
-        end
-    end)
-
-    if ok and type(key) == "string" and key:gsub("%s+", "") ~= "" then
-        KeyBox.Text = key:gsub("^%s+", ""):gsub("%s+$", "")
-        setRemember(true)
-        setStatus("Saved key loaded", "idle")
+    if key ~= "" then
+        KeyBox.Text = key
+        setStatus("Saved key loaded automatically", "idle")
     end
 end
 
@@ -517,7 +521,10 @@ local function verifyAndLoad()
             end
 
             currentSession = session
-            saveKey(key)
+            local saved, saveMessage = saveKey(key)
+            if not saved then
+                warn("[AIRESZ] Auto-save key failed:", saveMessage)
+            end
             setStatus("Key verified. Loading latest script...", "success")
 
             local loaded, loadError = session:LoadLatestScript()
@@ -546,14 +553,11 @@ local function verifyAndLoad()
     end)
 end
 
-RememberButton.MouseButton1Click:Connect(function()
-    setRemember(not rememberKey)
-end)
-
 ClearButton.MouseButton1Click:Connect(function()
     if verifying then return end
     KeyBox.Text = ""
-    setStatus("Waiting for a key", "idle")
+    deleteSavedKey()
+    setStatus("Saved key cleared", "idle")
 end)
 
 GetKeyButton.MouseButton1Click:Connect(function()
@@ -589,7 +593,7 @@ MinimizeButton.MouseButton1Click:Connect(function()
     MinimizeButton.Text = minimized and "+" or "—"
 
     TweenService:Create(Main, TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-        Size = minimized and UDim2.fromOffset(430, 62) or UDim2.fromOffset(430, 300)
+        Size = minimized and UDim2.fromOffset(430, 62) or UDim2.fromOffset(430, 270)
     }):Play()
 end)
 
@@ -676,12 +680,12 @@ end
 loadSavedKey()
 
 -- Entry animation.
-Main.Size = UDim2.fromOffset(430, 260)
+Main.Size = UDim2.fromOffset(430, 230)
 Main.BackgroundTransparency = 1
 TweenService:Create(Dim, TweenInfo.new(0.25), {
     BackgroundTransparency = 0.45
 }):Play()
 TweenService:Create(Main, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-    Size = UDim2.fromOffset(430, 300),
+    Size = UDim2.fromOffset(430, 270),
     BackgroundTransparency = 0
 }):Play()
