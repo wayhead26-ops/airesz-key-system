@@ -1,5 +1,5 @@
 --[[
-    Airesz Key System GUI v1.2 (Auto Save)
+    Airesz Key System GUI v1.3 (Close After Verify)
     Uses the existing Airesz v3.7.1 authorization client.
 
     Public client:
@@ -525,7 +525,13 @@ local function verifyAndLoad()
             if not saved then
                 warn("[AIRESZ] Auto-save key failed:", saveMessage)
             end
-            setStatus("Key verified. Loading latest script...", "success")
+
+            -- Verification is complete here. Close the key GUI immediately,
+            -- then continue loading the private script in the background.
+            notify("Airesz Key System", "Key verified. Loading script...")
+            if ScreenGui and ScreenGui.Parent then
+                ScreenGui:Destroy()
+            end
 
             local loaded, loadError = session:LoadLatestScript()
             if not loaded then
@@ -534,21 +540,23 @@ local function verifyAndLoad()
                 error(tostring(loadError or "Private script could not be loaded."))
             end
 
-            setStatus("Access granted. Script loaded successfully.", "success")
-            notify("Airesz Key System", "Key verified and script loaded.")
-
-            task.wait(1.1)
-            if ScreenGui and ScreenGui.Parent then
-                ScreenGui:Destroy()
-            end
+            notify("Airesz Key System", "Script loaded successfully.")
         end)
 
         if not ok then
-            setVerifyBusy(false)
             local message = tostring(err)
             message = message:gsub("^.-:%d+:%s*", "")
-            setStatus(message, "error")
-            notify("Verification Failed", message)
+
+            if ScreenGui and ScreenGui.Parent then
+                setVerifyBusy(false)
+                setStatus(message, "error")
+                notify("Verification Failed", message)
+            else
+                -- The key was already verified and the GUI was closed;
+                -- this means the private script failed while loading.
+                warn("[AIRESZ] Script load failed:", message)
+                notify("Script Load Failed", message)
+            end
         end
     end)
 end
