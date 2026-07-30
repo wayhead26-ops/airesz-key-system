@@ -1,6 +1,6 @@
 --[[
-    Airesz Key System GUI v1.4 (Auto Login)
-    Uses the existing Airesz v3.7.1 authorization client.
+    Airesz Key System GUI v1.5 (Auto Login + Auto Re-Key)
+    Uses the Airesz authorization client with protected-payload cleanup.
 
     Public client:
     https://raw.githubusercontent.com/wayhead26-ops/airesz-key-system/main/examples/roblox-client.lua
@@ -22,6 +22,7 @@ local LocalPlayer = Players.LocalPlayer
 local KEY_FOLDER = "AireszHub"
 local KEY_FILE = KEY_FOLDER .. "/saved-key.txt"
 local FALLBACK_KEY_FILE = "AireszHub_saved-key.txt"
+local RuntimeEnv = type(getgenv) == "function" and getgenv() or _G
 
 local function notify(title, text)
     pcall(function()
@@ -52,6 +53,15 @@ local function getGuiParent()
 end
 
 local guiParent = getGuiParent()
+
+-- Stop an older loader session cleanly when this loader is executed again.
+local previousSession = RuntimeEnv.AIRESZ_SESSION
+if type(previousSession) == "table" and type(previousSession.Stop) == "function" then
+    pcall(function()
+        previousSession:Stop("Loader restarted.")
+    end)
+end
+
 local oldGui = guiParent:FindFirstChild("AireszKeySystem")
 if oldGui then
     oldGui:Destroy()
@@ -65,6 +75,7 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 -- Keep the GUI hidden while a saved key is checked.
 ScreenGui.Enabled = false
 ScreenGui.Parent = guiParent
+RuntimeEnv.AIRESZ_KEY_GUI = ScreenGui
 
 local Dim = Instance.new("Frame")
 Dim.Name = "Dim"
@@ -336,6 +347,15 @@ VerifyGradient.Parent = VerifyButton
 local verifying = false
 local minimized = false
 local currentSession = nil
+local sessionGeneration = 0
+
+local REKEY_CODES = {
+    KEY_EXPIRED = true,
+    KEY_REVOKED = true,
+    KEY_DELETED = true,
+    KEY_INACTIVE = true,
+    SESSION_EXPIRED = true
+}
 
 local function setStatus(text, state)
     Status.Text = tostring(text)
@@ -476,6 +496,10 @@ local function showKeyGui(message, state)
 
     ScreenGui.Enabled = true
     Main.Visible = true
+    minimized = false
+    Content.Visible = true
+    Divider.Visible = true
+    MinimizeButton.Text = "—"
     setVerifyBusy(false)
 
     if message then
@@ -497,6 +521,12 @@ local function showKeyGui(message, state)
     }):Play()
 end
 
+local function hideKeyGui()
+    if ScreenGui and ScreenGui.Parent then
+        ScreenGui.Enabled = false
+    end
+end
+
 local function verifyAndLoad(keyOverride, silentSavedKey)
     if verifying then
         return
@@ -508,6 +538,9 @@ local function verifyAndLoad(keyOverride, silentSavedKey)
         notify("Airesz Key System", "Enter a valid key first.")
         return
     end
+
+    sessionGeneration = sessionGeneration + 1
+    local attemptGeneration = sessionGeneration
 
     setVerifyBusy(true)
     if not silentSavedKey then
@@ -541,11 +574,23 @@ local function verifyAndLoad(keyOverride, silentSavedKey)
                 setStatus("Checking key and device...", "loading")
             end
 
-            local session, resultOrError = startAireszSession(key, function(reason)
+            local session, resultOrError = startAireszSession(key, function(reason, code)
+                if attemptGeneration ~= sessionGeneration then
+                    return
+                end
+
                 warn("[AIRESZ] Access stopped:", reason)
-                if ScreenGui and ScreenGui.Parent then
+                currentSession = nil
+
+                if REKEY_CODES[tostring(code or "")] then
+                    deleteSavedKey()
                     KeyBox.Text = ""
+                    showKeyGui("Key expired or inactive. Enter a new key.", "error")
+                    notify("Airesz Key System", "Your key is no longer active. Enter a new key.")
+                else
+                    KeyBox.Text = key
                     showKeyGui("Access stopped: " .. tostring(reason), "error")
+                    notify("Airesz Key System", tostring(reason))
                 end
             end)
 
@@ -561,19 +606,17 @@ local function verifyAndLoad(keyOverride, silentSavedKey)
                 warn("[AIRESZ] Auto-save key failed:", saveMessage)
             end
 
-            -- Key is valid. Close the hidden/visible key GUI immediately,
-            -- then load the private script in the background.
+            -- Keep the Key GUI alive but hidden so heartbeat denial can show it
+            -- again without requiring another execute or a rejoin.
             if not silentSavedKey then
                 notify("Airesz Key System", "Key verified. Loading script...")
             end
 
-            if ScreenGui and ScreenGui.Parent then
-                ScreenGui:Destroy()
-            end
+            hideKeyGui()
 
             local loaded, loadError = session:LoadLatestScript()
             if not loaded then
-                session:Stop()
+                session:Stop("Private script failed to load.")
                 currentSession = nil
                 error(tostring(loadError or "Private script could not be loaded."))
             end
@@ -594,7 +637,7 @@ local function verifyAndLoad(keyOverride, silentSavedKey)
                 notify("Airesz Key System", "Saved key expired or invalid.")
             elseif ScreenGui and ScreenGui.Parent then
                 showKeyGui(message, "error")
-                notify("Verification Failed", message)
+                notify(verified and "Script Load Failed" or "Verification Failed", message)
             else
                 -- Verification succeeded and the GUI was already closed;
                 -- this means the private script failed while loading.
@@ -637,7 +680,12 @@ CloseButton.MouseButton1Click:Connect(function()
         setStatus("Wait until verification finishes", "loading")
         return
     end
-    ScreenGui:Destroy()
+    if currentSession and type(currentSession.IsAllowed) == "function" and currentSession:IsAllowed() then
+        hideKeyGui()
+    else
+        setStatus("Enter a valid key to continue", "error")
+        notify("Airesz Key System", "The key window must stay open until access is verified.")
+    end
 end)
 
 MinimizeButton.MouseButton1Click:Connect(function()
