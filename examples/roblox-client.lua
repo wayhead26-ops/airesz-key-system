@@ -1,10 +1,11 @@
--- Airesz v3.7.1 client example: maintenance heartbeat + multi-game auto update
--- Replace this with your deployed Cloudflare Worker URL.
+-- Airesz v3.9.0 authorization client:
+-- maintenance heartbeat + multi-game auto update + protected-payload cleanup.
 local WORKER_URL = "https://airesz-key-api.airesz-key-system.workers.dev"
 
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
+local RuntimeEnv = type(getgenv) == "function" and getgenv() or _G
 
 local function getRequestFunction()
     return request or http_request or (syn and syn.request)
@@ -27,7 +28,6 @@ local function getHwid()
     if ok and value and tostring(value) ~= "" then
         return tostring(value)
     end
-    -- Compatibility fallback only. A real executor HWID is stronger than this fallback.
     return "roblox-user-" .. tostring(player.UserId)
 end
 
@@ -64,6 +64,27 @@ local function identityPayload()
     }
 end
 
+local function callPayloadCleanup(payloadResult, reason)
+    if type(payloadResult) == "function" then
+        pcall(payloadResult, reason)
+        return
+    end
+
+    if type(payloadResult) ~= "table" then
+        return
+    end
+
+    for _, methodName in ipairs({"Unload", "Destroy", "Stop"}) do
+        local method = payloadResult[methodName]
+        if type(method) == "function" then
+            pcall(function()
+                method(payloadResult, reason)
+            end)
+            return
+        end
+    end
+end
+
 local function startAireszSession(key, onBlocked)
     local verifyPayload = identityPayload()
     verifyPayload.key = key
@@ -79,10 +100,17 @@ local function startAireszSession(key, onBlocked)
         token = result.sessionToken,
         sessionId = result.sessionId,
         heartbeatSeconds = tonumber(result.heartbeatSeconds) or 30,
-        verification = result
+        verification = result,
+        cleanupCallbacks = {},
+        trackedInstances = {},
+        payloadResult = nil,
+        payloadLoaded = false,
+        unloading = false,
+        endSent = false
     }
 
-    getgenv().AIRESZ_AUTHORIZED = true
+    RuntimeEnv.AIRESZ_AUTHORIZED = true
+    RuntimeEnv.AIRESZ_SESSION = session
 
     function session:IsAllowed()
         return self.allowed and not self.stopped
@@ -97,8 +125,66 @@ local function startAireszSession(key, onBlocked)
         return self.verification and self.verification.game or nil
     end
 
+    -- Private game scripts use this to stop loops, disconnect events and close UI.
+    function session:RegisterCleanup(callback)
+        assert(type(callback) == "function", "RegisterCleanup expects a function.")
+        table.insert(self.cleanupCallbacks, callback)
+        return callback
+    end
+
+    -- Optional helper for GUI or other instances owned by a protected payload.
+    function session:TrackInstance(instance)
+        assert(typeof(instance) == "Instance", "TrackInstance expects an Instance.")
+        table.insert(self.trackedInstances, instance)
+        return instance
+    end
+
+    function session:UnloadProtectedPayload(reason)
+        if self.unloading then
+            return
+        end
+
+        self.unloading = true
+        local cleanupReason = tostring(reason or "Authorization ended.")
+
+        local callbacks = self.cleanupCallbacks
+        self.cleanupCallbacks = {}
+        for index = #callbacks, 1, -1 do
+            pcall(callbacks[index], cleanupReason)
+        end
+
+        local payloadResult = self.payloadResult
+        self.payloadResult = nil
+        callPayloadCleanup(payloadResult, cleanupReason)
+
+        local instances = self.trackedInstances
+        self.trackedInstances = {}
+        for index = #instances, 1, -1 do
+            local instance = instances[index]
+            pcall(function()
+                if instance and instance.Parent then
+                    instance:Destroy()
+                end
+            end)
+        end
+
+        self.payloadLoaded = false
+        RuntimeEnv.AIRESZ_PAYLOAD = nil
+        RuntimeEnv.AIRESZ_GAME_CONFIG = nil
+        RuntimeEnv.AIRESZ_GAME_VERSION = nil
+        if RuntimeEnv.AIRESZ_SESSION == self then
+            RuntimeEnv.AIRESZ_SESSION = nil
+        end
+        self.unloading = false
+    end
+
     function session:LoadLatestScript()
         self:AssertAllowed()
+
+        if self.payloadLoaded then
+            self:UnloadProtectedPayload("Reloading protected payload.")
+        end
+
         local gameConfig = self:GetGameConfig()
         if not gameConfig then
             return nil, "This Place ID is not registered in Game Control."
@@ -122,9 +208,9 @@ local function startAireszSession(key, onBlocked)
             Body = HttpService:JSONEncode(payload)
         })
 
-        local statusCode = tonumber(response.StatusCode) or 0
+        local downloadStatus = tonumber(response.StatusCode) or 0
         local source = tostring(response.Body or "")
-        if statusCode ~= 200 then
+        if downloadStatus ~= 200 then
             local message = "Auto update download failed."
             pcall(function()
                 local decoded = HttpService:JSONDecode(source)
@@ -141,96 +227,95 @@ local function startAireszSession(key, onBlocked)
             return nil, "Latest script compile failed: " .. tostring(compileError)
         end
 
-        getgenv().AIRESZ_SESSION = self
-        getgenv().AIRESZ_GAME_CONFIG = gameConfig
-        getgenv().AIRESZ_GAME_VERSION = gameConfig.latestVersion
+        RuntimeEnv.AIRESZ_SESSION = self
+        RuntimeEnv.AIRESZ_GAME_CONFIG = gameConfig
+        RuntimeEnv.AIRESZ_GAME_VERSION = gameConfig.latestVersion
 
         local okRun, resultValue = pcall(chunk)
         if not okRun then
+            self:UnloadProtectedPayload("Latest script runtime failed.")
             return nil, "Latest script runtime failed: " .. tostring(resultValue)
         end
+
+        self.payloadResult = resultValue
+        self.payloadLoaded = true
+        RuntimeEnv.AIRESZ_PAYLOAD = resultValue
         return true, resultValue
     end
 
-    function session:Stop()
-        if self.stopped then return end
+    function session:Stop(reason)
+        if self.stopped and not self.payloadLoaded then
+            return
+        end
+
         self.stopped = true
         self.allowed = false
-        getgenv().AIRESZ_AUTHORIZED = false
-        pcall(function()
-            requestJson("/api/client/end", { sessionToken = self.token })
-        end)
+        RuntimeEnv.AIRESZ_AUTHORIZED = false
+        self:UnloadProtectedPayload(reason or "Session stopped.")
+
+        if not self.endSent then
+            self.endSent = true
+            pcall(function()
+                requestJson("/api/client/end", { sessionToken = self.token })
+            end)
+        end
     end
 
-    local function block(reason)
-        if not session.allowed then return end
+    local function block(reason, code)
+        if not session.allowed then
+            return
+        end
+
         session.allowed = false
         session.stopped = true
-        getgenv().AIRESZ_AUTHORIZED = false
+        RuntimeEnv.AIRESZ_AUTHORIZED = false
+        session:UnloadProtectedPayload(reason)
+
         warn("[AIRESZ] Access stopped: " .. tostring(reason))
         if type(onBlocked) == "function" then
-            pcall(onBlocked, tostring(reason))
+            pcall(onBlocked, tostring(reason), tostring(code or "ACCESS_DENIED"))
         end
     end
 
     task.spawn(function()
         local networkFailures = 0
+
         while session:IsAllowed() do
             task.wait(session.heartbeatSeconds)
-            if not session:IsAllowed() then break end
+            if not session:IsAllowed() then
+                break
+            end
 
-            local payload = identityPayload()
-            payload.sessionToken = session.token
+            local heartbeatPayload = identityPayload()
+            heartbeatPayload.sessionToken = session.token
 
             local ok, heartbeatStatus, heartbeat = pcall(function()
-                local code, data = requestJson("/api/client/heartbeat", payload)
+                local code, data = requestJson("/api/client/heartbeat", heartbeatPayload)
                 return code, data
             end)
 
             if not ok then
-                networkFailures += 1
+                networkFailures = networkFailures + 1
                 if networkFailures >= 3 then
-                    block("Authorization heartbeat could not reach the server.")
+                    block("Authorization heartbeat could not reach the server.", "NETWORK_UNAVAILABLE")
                 end
             elseif heartbeatStatus == 200 and heartbeat.allowed then
                 networkFailures = 0
             elseif heartbeatStatus == 0 or heartbeatStatus >= 500 then
-                networkFailures += 1
+                networkFailures = networkFailures + 1
                 if networkFailures >= 3 then
-                    block(heartbeat.error or "Authorization server is unavailable.")
+                    block(heartbeat.error or "Authorization server is unavailable.", "SERVER_UNAVAILABLE")
                 end
             else
-                block(heartbeat.error or "Access was denied by the authorization server.")
+                block(
+                    heartbeat.error or "Access was denied by the authorization server.",
+                    heartbeat.code or "ACCESS_DENIED"
+                )
             end
         end
     end)
 
     return session, result
 end
-
--- Example usage:
--- local KEY = "AIRESZ-24H-XXXX-XXXX-XXXX-XXXX-XXXX"
--- local session, result = startAireszSession(KEY, function(reason)
---     -- Stop loops, close your UI and disable protected features here.
---     warn("Protected payload disabled:", reason)
--- end)
--- if not session then error(result) end
--- print("Key valid. Counted execution:", result.counted)
--- print("Matched game:", result.game and result.game.name or "Unmanaged Place ID")
---
--- Auto update for the current game:
--- local loaded, loadError = session:LoadLatestScript()
--- if not loaded then error(loadError) end
---
--- The downloaded script can access:
--- getgenv().AIRESZ_SESSION
--- getgenv().AIRESZ_GAME_CONFIG
--- getgenv().AIRESZ_GAME_VERSION
---
--- In long-running loops, check:
--- while session:IsAllowed() do
---     task.wait(1)
---     -- protected feature
--- end
 
 return startAireszSession
