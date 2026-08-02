@@ -45,7 +45,7 @@ function setMessage(text = "", ok = false) {
 }
 
 function providerLabel() {
-  const labels = { linkvertise: "Linkvertise", workink: "Work.ink" };
+  const labels = { linkvertise: "Linkvertise", workink: "Work.ink", lootlabs: "LootLabs" };
   return labels[state.provider] || state.provider;
 }
 
