@@ -91,7 +91,9 @@ local function startAireszSession(key, onBlocked)
 
     local statusCode, result = requestJson("/api/key/verify", verifyPayload)
     if statusCode ~= 200 or not result.valid or not result.sessionToken then
-        return nil, result.error or "Key verification failed."
+        return nil,
+            result.error or "Key verification failed.",
+            result.code or (statusCode == 0 and "NETWORK_UNAVAILABLE" or "VERIFY_FAILED")
     end
 
     local session = {
@@ -102,6 +104,7 @@ local function startAireszSession(key, onBlocked)
         heartbeatSeconds = tonumber(result.heartbeatSeconds) or 30,
         verification = result,
         cleanupCallbacks = {},
+        trackedConnections = {},
         trackedInstances = {},
         payloadResult = nil,
         payloadLoaded = false,
@@ -132,6 +135,17 @@ local function startAireszSession(key, onBlocked)
         return callback
     end
 
+    -- Connections registered by a protected payload are disconnected before
+    -- the payload UI is removed. This prevents old callbacks surviving re-key.
+    function session:RegisterConnection(connection)
+        assert(
+            typeof(connection) == "RBXScriptConnection",
+            "RegisterConnection expects an RBXScriptConnection."
+        )
+        table.insert(self.trackedConnections, connection)
+        return connection
+    end
+
     -- Optional helper for GUI or other instances owned by a protected payload.
     function session:TrackInstance(instance)
         assert(typeof(instance) == "Instance", "TrackInstance expects an Instance.")
@@ -151,6 +165,17 @@ local function startAireszSession(key, onBlocked)
         self.cleanupCallbacks = {}
         for index = #callbacks, 1, -1 do
             pcall(callbacks[index], cleanupReason)
+        end
+
+        local connections = self.trackedConnections
+        self.trackedConnections = {}
+        for index = #connections, 1, -1 do
+            local connection = connections[index]
+            pcall(function()
+                if connection and connection.Connected then
+                    connection:Disconnect()
+                end
+            end)
         end
 
         local payloadResult = self.payloadResult
@@ -301,6 +326,15 @@ local function startAireszSession(key, onBlocked)
                 end
             elseif heartbeatStatus == 200 and heartbeat.allowed then
                 networkFailures = 0
+                if heartbeat.sessionToken then
+                    session.token = tostring(heartbeat.sessionToken)
+                end
+                if tonumber(heartbeat.heartbeatSeconds) then
+                    session.heartbeatSeconds = math.max(
+                        5,
+                        tonumber(heartbeat.heartbeatSeconds)
+                    )
+                end
             elseif heartbeatStatus == 0 or heartbeatStatus >= 500 then
                 networkFailures = networkFailures + 1
                 if networkFailures >= 3 then
