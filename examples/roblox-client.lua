@@ -101,7 +101,7 @@ local function startAireszSession(key, onBlocked)
         stopped = false,
         token = result.sessionToken,
         sessionId = result.sessionId,
-        heartbeatSeconds = tonumber(result.heartbeatSeconds) or 30,
+        heartbeatSeconds = 10,
         verification = result,
         cleanupCallbacks = {},
         trackedConnections = {},
@@ -329,12 +329,7 @@ local function startAireszSession(key, onBlocked)
                 if heartbeat.sessionToken then
                     session.token = tostring(heartbeat.sessionToken)
                 end
-                if tonumber(heartbeat.heartbeatSeconds) then
-                    session.heartbeatSeconds = math.max(
-                        5,
-                        tonumber(heartbeat.heartbeatSeconds)
-                    )
-                end
+                session.heartbeatSeconds = 10
             elseif heartbeatStatus == 0 or heartbeatStatus >= 500 then
                 networkFailures = networkFailures + 1
                 if networkFailures >= 3 then
