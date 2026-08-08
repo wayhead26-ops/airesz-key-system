@@ -354,8 +354,43 @@ local REKEY_CODES = {
     KEY_REVOKED = true,
     KEY_DELETED = true,
     KEY_INACTIVE = true,
-    SESSION_EXPIRED = true
+    KEY_INVALID = true,
+    KEY_NOT_FOUND = true,
+    KEY_DISABLED = true,
+    INVALID_KEY = true,
+    SESSION_EXPIRED = true,
+    SESSION_REVOKED = true,
+    ACCESS_DENIED = true,
+    UNAUTHORIZED = true
 }
+
+local NON_REKEY_CODES = {
+    NETWORK_UNAVAILABLE = true,
+    SERVER_UNAVAILABLE = true
+}
+
+local function requiresNewKey(reason, code)
+    local normalizedCode = tostring(code or "UNKNOWN"):upper()
+
+    if REKEY_CODES[normalizedCode] then
+        return true
+    end
+    if NON_REKEY_CODES[normalizedCode] then
+        return false
+    end
+
+    local message = tostring(reason or ""):lower()
+    for _, marker in ipairs({
+        "expired", "revoked", "deleted", "inactive", "invalid key",
+        "key not found", "unknown key", "access denied", "unauthorized"
+    }) do
+        if message:find(marker, 1, true) then
+            return true
+        end
+    end
+
+    return false
+end
 
 local function setStatus(text, state)
     Status.Text = tostring(text)
@@ -403,6 +438,8 @@ local function deleteSavedKey()
 
     local env = type(getgenv) == "function" and getgenv() or _G
     env.AIRESZ_SAVED_KEY = nil
+    env.AIRESZ_KEY = nil
+    env.AIRESZ_REKEY_REQUIRED = true
     return deleted
 end
 
@@ -417,6 +454,8 @@ local function saveKey(key)
     -- even when the executor has no file API.
     local env = type(getgenv) == "function" and getgenv() or _G
     env.AIRESZ_SAVED_KEY = key
+    env.AIRESZ_KEY = key
+    env.AIRESZ_REKEY_REQUIRED = false
 
     if type(writefile) ~= "function" then
         return false, "Executor does not support writefile"
@@ -549,6 +588,7 @@ local function verifyAndLoad(keyOverride, silentSavedKey)
 
     task.spawn(function()
         local verified = false
+        local verificationCode = nil
 
         local ok, err = pcall(function()
             local cacheBuster = tostring(os.time()) .. tostring(math.random(1000, 9999))
@@ -574,7 +614,7 @@ local function verifyAndLoad(keyOverride, silentSavedKey)
                 setStatus("Checking key and device...", "loading")
             end
 
-            local session, resultOrError = startAireszSession(key, function(reason, code)
+            local session, resultOrError, resultCode = startAireszSession(key, function(reason, code)
                 if attemptGeneration ~= sessionGeneration then
                     return
                 end
@@ -582,7 +622,7 @@ local function verifyAndLoad(keyOverride, silentSavedKey)
                 warn("[AIRESZ] Access stopped:", reason)
                 currentSession = nil
 
-                if REKEY_CODES[tostring(code or "")] then
+                if requiresNewKey(reason, code) then
                     deleteSavedKey()
                     KeyBox.Text = ""
                     showKeyGui("Key expired or inactive. Enter a new key.", "error")
@@ -595,6 +635,7 @@ local function verifyAndLoad(keyOverride, silentSavedKey)
             end)
 
             if not session then
+                verificationCode = resultCode
                 error(tostring(resultOrError or "Key verification failed."))
             end
 
@@ -629,12 +670,19 @@ local function verifyAndLoad(keyOverride, silentSavedKey)
             message = message:gsub("^.-:%d+:%s*", "")
 
             if silentSavedKey and not verified then
-                -- Prevent an invalid/expired saved key from causing an endless auto-login loop.
-                deleteSavedKey()
-                KeyBox.Text = ""
-                showKeyGui("Saved key is no longer valid. Enter a new key.", "error")
                 warn("[AIRESZ] Saved key verification failed:", message)
-                notify("Airesz Key System", "Saved key expired or invalid.")
+
+                if requiresNewKey(message, verificationCode) then
+                    -- Prevent an invalid/expired saved key from causing an endless auto-login loop.
+                    deleteSavedKey()
+                    KeyBox.Text = ""
+                    showKeyGui("Saved key is no longer valid. Enter a new key.", "error")
+                    notify("Airesz Key System", "Saved key expired or invalid.")
+                else
+                    KeyBox.Text = key
+                    showKeyGui("Could not verify saved key: " .. message, "error")
+                    notify("Airesz Key System", "Verification unavailable. Your saved key was kept.")
+                end
             elseif ScreenGui and ScreenGui.Parent then
                 showKeyGui(message, "error")
                 notify(verified and "Script Load Failed" or "Verification Failed", message)
