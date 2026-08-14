@@ -1,38 +1,37 @@
 --[[
-    Airesz Key System GUI v1.5 (Auto Login + Auto Re-Key)
-    Uses the Airesz authorization client with protected-payload cleanup.
-
-    Public client:
-    https://raw.githubusercontent.com/wayhead26-ops/airesz-key-system/main/examples/roblox-client.lua
-
-    Key page:
-    https://wayhead26-ops.github.io/airesz-key-system/
+    Airesz Key System - Alternative GUI + Production Runtime
+    Auto login, saved key, auto re-key, protected script loading and session cleanup.
 ]]
 
 local WORKER_URL = "https://airesz-key-api.airesz-key-system.workers.dev"
 local AUTH_CLIENT_URL = "https://raw.githubusercontent.com/wayhead26-ops/airesz-key-system/main/examples/roblox-client.lua"
 local GET_KEY_URL = "https://wayhead26-ops.github.io/airesz-key-system/"
+local DISCORD_URL = "https://discord.gg/nAqMBZVbTK"
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local StarterGui = game:GetService("StarterGui")
-
 local LocalPlayer = Players.LocalPlayer
 local KEY_FOLDER = "AireszHub"
 local KEY_FILE = KEY_FOLDER .. "/saved-key.txt"
 local FALLBACK_KEY_FILE = "AireszHub_saved-key.txt"
 local RuntimeEnv = type(getgenv) == "function" and getgenv() or _G
 
-local function notify(title, text)
-    pcall(function()
-        StarterGui:SetCore("SendNotification", {
-            Title = title,
-            Text = text,
-            Duration = 5
-        })
-    end)
-end
+local COLORS = {
+    Background = Color3.fromRGB(8, 10, 17),
+    Panel = Color3.fromRGB(14, 17, 27),
+    Card = Color3.fromRGB(20, 24, 37),
+    CardHover = Color3.fromRGB(27, 32, 48),
+    Border = Color3.fromRGB(48, 56, 78),
+    Muted = Color3.fromRGB(125, 134, 158),
+    Text = Color3.fromRGB(238, 241, 250),
+    Purple = Color3.fromRGB(139, 92, 246),
+    Blue = Color3.fromRGB(53, 166, 255),
+    Green = Color3.fromRGB(52, 211, 153),
+    Yellow = Color3.fromRGB(251, 191, 36),
+    Red = Color3.fromRGB(251, 113, 133)
+}
 
 local function getGuiParent()
     if type(gethui) == "function" then
@@ -52,9 +51,85 @@ local function getGuiParent()
     return LocalPlayer:WaitForChild("PlayerGui")
 end
 
-local guiParent = getGuiParent()
+local function corner(parent, radius)
+    local object = Instance.new("UICorner")
+    object.CornerRadius = UDim.new(0, radius)
+    object.Parent = parent
+    return object
+end
 
--- Stop an older loader session cleanly when this loader is executed again.
+local function stroke(parent, color, transparency, thickness)
+    local object = Instance.new("UIStroke")
+    object.Color = color
+    object.Transparency = transparency or 0
+    object.Thickness = thickness or 1
+    object.Parent = parent
+    return object
+end
+
+local function label(parent, text, position, size, font, textSize, color)
+    local object = Instance.new("TextLabel")
+    object.BackgroundTransparency = 1
+    object.Font = font or Enum.Font.Gotham
+    object.Position = position
+    object.Size = size
+    object.Text = text
+    object.TextColor3 = color or COLORS.Text
+    object.TextSize = textSize or 12
+    object.TextXAlignment = Enum.TextXAlignment.Left
+    object.Parent = parent
+    return object
+end
+
+local function button(parent, name, text, position, size, color)
+    local object = Instance.new("TextButton")
+    object.Name = name
+    object.AutoButtonColor = false
+    object.BackgroundColor3 = color or COLORS.Card
+    object.BorderSizePixel = 0
+    object.Font = Enum.Font.GothamSemibold
+    object.Position = position
+    object.Size = size
+    object.Text = text
+    object.TextColor3 = COLORS.Text
+    object.TextSize = 11
+    object.Parent = parent
+    corner(object, 10)
+    stroke(object, COLORS.Border, 0.4, 1)
+    return object
+end
+
+local function addInteraction(object, normalColor, hoverColor)
+    local scale = Instance.new("UIScale")
+    scale.Parent = object
+
+    object.MouseEnter:Connect(function()
+        TweenService:Create(object, TweenInfo.new(0.14), {
+            BackgroundColor3 = hoverColor
+        }):Play()
+    end)
+
+    object.MouseLeave:Connect(function()
+        TweenService:Create(object, TweenInfo.new(0.14), {
+            BackgroundColor3 = normalColor
+        }):Play()
+        TweenService:Create(scale, TweenInfo.new(0.1), {Scale = 1}):Play()
+    end)
+
+    object.MouseButton1Down:Connect(function()
+        TweenService:Create(scale, TweenInfo.new(0.08), {Scale = 0.97}):Play()
+    end)
+
+    object.MouseButton1Up:Connect(function()
+        TweenService:Create(
+            scale,
+            TweenInfo.new(0.12, Enum.EasingStyle.Back),
+            {Scale = 1}
+        ):Play()
+    end)
+end
+
+local guiParent = getGuiParent()
 local previousSession = RuntimeEnv.AIRESZ_SESSION
 if type(previousSession) == "table" and type(previousSession.Stop) == "function" then
     pcall(function()
@@ -62,288 +137,306 @@ if type(previousSession) == "table" and type(previousSession.Stop) == "function"
     end)
 end
 
-local oldGui = guiParent:FindFirstChild("AireszKeySystem")
-if oldGui then
-    oldGui:Destroy()
+local previous = guiParent:FindFirstChild("AireszKeyAlternative")
+if previous then
+    previous:Destroy()
 end
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "AireszKeySystem"
-ScreenGui.ResetOnSpawn = false
+ScreenGui.Name = "AireszKeyAlternative"
 ScreenGui.IgnoreGuiInset = true
+ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
--- Keep the GUI hidden while a saved key is checked.
 ScreenGui.Enabled = false
 ScreenGui.Parent = guiParent
 RuntimeEnv.AIRESZ_KEY_GUI = ScreenGui
 
-local Dim = Instance.new("Frame")
-Dim.Name = "Dim"
-Dim.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-Dim.BackgroundTransparency = 1
-Dim.BorderSizePixel = 0
-Dim.Size = UDim2.fromScale(1, 1)
-Dim.Parent = ScreenGui
+local Backdrop = Instance.new("Frame")
+Backdrop.BackgroundColor3 = COLORS.Background
+Backdrop.BackgroundTransparency = 0.18
+Backdrop.BorderSizePixel = 0
+Backdrop.Size = UDim2.fromScale(1, 1)
+Backdrop.Parent = ScreenGui
+
+local backdropGradient = Instance.new("UIGradient")
+backdropGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(7, 8, 15)),
+    ColorSequenceKeypoint.new(0.55, Color3.fromRGB(19, 12, 35)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(7, 20, 30))
+})
+backdropGradient.Rotation = 30
+backdropGradient.Parent = Backdrop
 
 local Main = Instance.new("Frame")
 Main.Name = "Main"
 Main.AnchorPoint = Vector2.new(0.5, 0.5)
-Main.BackgroundColor3 = Color3.fromRGB(16, 18, 27)
+Main.BackgroundColor3 = Color3.fromRGB(104, 117, 255)
 Main.BorderSizePixel = 0
-Main.Position = UDim2.fromScale(0.5, 0.48)
-Main.Size = UDim2.fromOffset(430, 270)
 Main.ClipsDescendants = true
+Main.Position = UDim2.fromScale(0.5, 0.5)
+Main.Size = UDim2.fromOffset(560, 440)
 Main.Parent = ScreenGui
+corner(Main, 18)
 
-local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0, 16)
-MainCorner.Parent = Main
+local Surface = Instance.new("Frame")
+Surface.Name = "Surface"
+Surface.BackgroundColor3 = COLORS.Panel
+Surface.BorderSizePixel = 0
+Surface.ClipsDescendants = true
+Surface.Position = UDim2.fromOffset(2, 2)
+Surface.Size = UDim2.new(1, -4, 1, -4)
+Surface.Parent = Main
+corner(Surface, 16)
 
-local MainStroke = Instance.new("UIStroke")
-MainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-MainStroke.Color = Color3.fromRGB(91, 103, 255)
-MainStroke.Transparency = 0.15
-MainStroke.Thickness = 1.5
-MainStroke.Parent = Main
+local Sidebar = Instance.new("Frame")
+Sidebar.BackgroundColor3 = Color3.fromRGB(17, 17, 30)
+Sidebar.BorderSizePixel = 0
+Sidebar.ClipsDescendants = true
+Sidebar.Size = UDim2.new(0, 152, 1, 0)
+Sidebar.Parent = Surface
+corner(Sidebar, 16)
 
-local MainGradient = Instance.new("UIGradient")
-MainGradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(117, 83, 255)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(51, 190, 255))
-})
-MainGradient.Rotation = 35
-MainGradient.Parent = MainStroke
+local SidebarSquareFill = Instance.new("Frame")
+SidebarSquareFill.BackgroundColor3 = Sidebar.BackgroundColor3
+SidebarSquareFill.BorderSizePixel = 0
+SidebarSquareFill.Position = UDim2.fromOffset(16, 0)
+SidebarSquareFill.Size = UDim2.new(1, -16, 1, 0)
+SidebarSquareFill.Parent = Sidebar
 
-local TopBar = Instance.new("Frame")
-TopBar.Name = "TopBar"
-TopBar.BackgroundTransparency = 1
-TopBar.Size = UDim2.new(1, 0, 0, 62)
-TopBar.Parent = Main
+local BrandIcon = Instance.new("Frame")
+BrandIcon.BackgroundColor3 = COLORS.Purple
+BrandIcon.BorderSizePixel = 0
+BrandIcon.Position = UDim2.fromOffset(18, 20)
+BrandIcon.Size = UDim2.fromOffset(40, 40)
+BrandIcon.Parent = Sidebar
+corner(BrandIcon, 12)
+stroke(BrandIcon, Color3.fromRGB(185, 164, 255), 0.2, 1)
 
-local Logo = Instance.new("Frame")
-Logo.Name = "Logo"
-Logo.BackgroundColor3 = Color3.fromRGB(91, 103, 255)
-Logo.BorderSizePixel = 0
-Logo.Position = UDim2.fromOffset(20, 16)
-Logo.Size = UDim2.fromOffset(32, 32)
-Logo.Parent = TopBar
+local iconGradient = Instance.new("UIGradient")
+iconGradient.Color = ColorSequence.new(COLORS.Purple, COLORS.Blue)
+iconGradient.Rotation = 40
+iconGradient.Parent = BrandIcon
 
-local LogoCorner = Instance.new("UICorner")
-LogoCorner.CornerRadius = UDim.new(0, 9)
-LogoCorner.Parent = Logo
+local BrandLetter = label(
+    BrandIcon,
+    "A",
+    UDim2.fromScale(0, 0),
+    UDim2.fromScale(1, 1),
+    Enum.Font.GothamBold,
+    20,
+    Color3.new(1, 1, 1)
+)
+BrandLetter.TextXAlignment = Enum.TextXAlignment.Center
 
-local LogoGradient = Instance.new("UIGradient")
-LogoGradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(127, 90, 255)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(57, 194, 255))
-})
-LogoGradient.Rotation = 45
-LogoGradient.Parent = Logo
+label(Sidebar, "AIRESZ", UDim2.fromOffset(18, 72), UDim2.fromOffset(116, 20), Enum.Font.GothamBold, 15)
+label(Sidebar, "ACCESS PORTAL", UDim2.fromOffset(18, 91), UDim2.fromOffset(116, 16), Enum.Font.GothamBold, 8, COLORS.Muted)
 
-local LogoText = Instance.new("TextLabel")
-LogoText.BackgroundTransparency = 1
-LogoText.Font = Enum.Font.GothamBold
-LogoText.Text = "A"
-LogoText.TextColor3 = Color3.fromRGB(255, 255, 255)
-LogoText.TextSize = 18
-LogoText.Size = UDim2.fromScale(1, 1)
-LogoText.Parent = Logo
+local NavCard = Instance.new("Frame")
+NavCard.BackgroundColor3 = Color3.fromRGB(29, 25, 51)
+NavCard.BorderSizePixel = 0
+NavCard.Position = UDim2.fromOffset(12, 132)
+NavCard.Size = UDim2.new(1, -24, 0, 42)
+NavCard.Parent = Sidebar
+corner(NavCard, 10)
+stroke(NavCard, COLORS.Purple, 0.5, 1)
 
-local Title = Instance.new("TextLabel")
-Title.BackgroundTransparency = 1
-Title.Font = Enum.Font.GothamBold
-Title.Position = UDim2.fromOffset(64, 13)
-Title.Size = UDim2.new(1, -150, 0, 23)
-Title.Text = "AIRESZ KEY SYSTEM"
-Title.TextColor3 = Color3.fromRGB(245, 247, 255)
-Title.TextSize = 17
-Title.TextXAlignment = Enum.TextXAlignment.Left
-Title.Parent = TopBar
+local NavAccent = Instance.new("Frame")
+NavAccent.BackgroundColor3 = COLORS.Purple
+NavAccent.BorderSizePixel = 0
+NavAccent.Position = UDim2.fromOffset(0, 9)
+NavAccent.Size = UDim2.fromOffset(3, 24)
+NavAccent.Parent = NavCard
+corner(NavAccent, 3)
 
-local Subtitle = Instance.new("TextLabel")
-Subtitle.BackgroundTransparency = 1
-Subtitle.Font = Enum.Font.Gotham
-Subtitle.Position = UDim2.fromOffset(64, 35)
-Subtitle.Size = UDim2.new(1, -150, 0, 18)
-Subtitle.Text = "Secure access verification"
-Subtitle.TextColor3 = Color3.fromRGB(135, 142, 166)
-Subtitle.TextSize = 11
-Subtitle.TextXAlignment = Enum.TextXAlignment.Left
-Subtitle.Parent = TopBar
+label(NavCard, "◇", UDim2.fromOffset(12, 0), UDim2.fromOffset(22, 42), Enum.Font.GothamBold, 14, Color3.fromRGB(180, 163, 255))
+label(NavCard, "License", UDim2.fromOffset(37, 0), UDim2.new(1, -42, 1, 0), Enum.Font.GothamSemibold, 11)
 
-local function makeTopButton(name, text, xOffset)
-    local button = Instance.new("TextButton")
-    button.Name = name
-    button.AnchorPoint = Vector2.new(1, 0)
-    button.BackgroundColor3 = Color3.fromRGB(27, 30, 43)
-    button.BorderSizePixel = 0
-    button.Position = UDim2.new(1, xOffset, 0, 17)
-    button.Size = UDim2.fromOffset(28, 28)
-    button.AutoButtonColor = false
-    button.Font = Enum.Font.GothamBold
-    button.Text = text
-    button.TextColor3 = Color3.fromRGB(170, 176, 198)
-    button.TextSize = 14
-    button.Parent = TopBar
+local SideStatus = Instance.new("Frame")
+SideStatus.BackgroundColor3 = Color3.fromRGB(16, 35, 32)
+SideStatus.BorderSizePixel = 0
+SideStatus.Position = UDim2.new(0, 12, 1, -82)
+SideStatus.Size = UDim2.new(1, -24, 0, 54)
+SideStatus.Parent = Sidebar
+corner(SideStatus, 11)
+stroke(SideStatus, COLORS.Green, 0.65, 1)
 
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 8)
-    corner.Parent = button
+local LiveDot = Instance.new("Frame")
+LiveDot.BackgroundColor3 = COLORS.Green
+LiveDot.BorderSizePixel = 0
+LiveDot.Position = UDim2.fromOffset(12, 13)
+LiveDot.Size = UDim2.fromOffset(8, 8)
+LiveDot.Parent = SideStatus
+corner(LiveDot, 8)
 
-    button.MouseEnter:Connect(function()
-        TweenService:Create(button, TweenInfo.new(0.15), {
-            BackgroundColor3 = Color3.fromRGB(38, 42, 59),
-            TextColor3 = Color3.fromRGB(255, 255, 255)
-        }):Play()
-    end)
-    button.MouseLeave:Connect(function()
-        TweenService:Create(button, TweenInfo.new(0.15), {
-            BackgroundColor3 = Color3.fromRGB(27, 30, 43),
-            TextColor3 = Color3.fromRGB(170, 176, 198)
-        }):Play()
-    end)
+label(SideStatus, "SYSTEM ONLINE", UDim2.fromOffset(27, 7), UDim2.new(1, -34, 0, 20), Enum.Font.GothamBold, 9, COLORS.Green)
+label(SideStatus, "All services ready", UDim2.fromOffset(12, 28), UDim2.new(1, -20, 0, 16), Enum.Font.Gotham, 8, COLORS.Muted)
 
-    return button
-end
+TweenService:Create(
+    LiveDot,
+    TweenInfo.new(0.9, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+    {BackgroundTransparency = 0.65}
+):Play()
 
-local MinimizeButton = makeTopButton("Minimize", "—", -56)
-local CloseButton = makeTopButton("Close", "×", -20)
+local Header = Instance.new("Frame")
+Header.BackgroundTransparency = 1
+Header.Position = UDim2.fromOffset(152, 0)
+Header.Size = UDim2.new(1, -152, 0, 70)
+Header.Parent = Surface
 
-local Divider = Instance.new("Frame")
-Divider.BackgroundColor3 = Color3.fromRGB(38, 42, 57)
-Divider.BorderSizePixel = 0
-Divider.Position = UDim2.fromOffset(20, 61)
-Divider.Size = UDim2.new(1, -40, 0, 1)
-Divider.Parent = Main
+label(Header, "License verification", UDim2.fromOffset(22, 13), UDim2.new(1, -120, 0, 24), Enum.Font.GothamBold, 17)
+label(Header, "Enter your access key to continue", UDim2.fromOffset(22, 38), UDim2.new(1, -120, 0, 18), Enum.Font.Gotham, 10, COLORS.Muted)
+
+local MinimizeButton = button(Header, "Minimize", "—", UDim2.new(1, -74, 0, 18), UDim2.fromOffset(26, 26), Color3.fromRGB(27, 31, 45))
+local CloseButton = button(Header, "Close", "×", UDim2.new(1, -40, 0, 18), UDim2.fromOffset(26, 26), Color3.fromRGB(27, 31, 45))
 
 local Content = Instance.new("Frame")
-Content.Name = "Content"
 Content.BackgroundTransparency = 1
-Content.Position = UDim2.fromOffset(20, 75)
-Content.Size = UDim2.new(1, -40, 1, -95)
-Content.Parent = Main
+Content.Position = UDim2.fromOffset(174, 72)
+Content.Size = UDim2.new(1, -196, 1, -92)
+Content.Parent = Surface
 
-local KeyLabel = Instance.new("TextLabel")
-KeyLabel.BackgroundTransparency = 1
-KeyLabel.Font = Enum.Font.GothamMedium
-KeyLabel.Size = UDim2.new(1, 0, 0, 20)
-KeyLabel.Text = "License Key"
-KeyLabel.TextColor3 = Color3.fromRGB(206, 211, 230)
-KeyLabel.TextSize = 12
-KeyLabel.TextXAlignment = Enum.TextXAlignment.Left
-KeyLabel.Parent = Content
+local KeyCard = Instance.new("Frame")
+KeyCard.BackgroundColor3 = COLORS.Card
+KeyCard.BorderSizePixel = 0
+KeyCard.Size = UDim2.new(1, 0, 0, 116)
+KeyCard.Parent = Content
+corner(KeyCard, 13)
+stroke(KeyCard, COLORS.Border, 0.28, 1)
+
+label(KeyCard, "YOUR LICENSE KEY", UDim2.fromOffset(14, 11), UDim2.new(1, -28, 0, 18), Enum.Font.GothamBold, 9, Color3.fromRGB(166, 174, 200))
 
 local InputHolder = Instance.new("Frame")
-InputHolder.BackgroundColor3 = Color3.fromRGB(23, 26, 38)
+InputHolder.BackgroundColor3 = Color3.fromRGB(13, 16, 26)
 InputHolder.BorderSizePixel = 0
-InputHolder.Position = UDim2.fromOffset(0, 28)
-InputHolder.Size = UDim2.new(1, 0, 0, 48)
-InputHolder.Parent = Content
-
-local InputCorner = Instance.new("UICorner")
-InputCorner.CornerRadius = UDim.new(0, 10)
-InputCorner.Parent = InputHolder
-
-local InputStroke = Instance.new("UIStroke")
-InputStroke.Color = Color3.fromRGB(48, 53, 72)
-InputStroke.Transparency = 0.15
-InputStroke.Thickness = 1
-InputStroke.Parent = InputHolder
+InputHolder.Position = UDim2.fromOffset(14, 36)
+InputHolder.Size = UDim2.new(1, -28, 0, 48)
+InputHolder.Parent = KeyCard
+corner(InputHolder, 10)
+local inputStroke = stroke(InputHolder, COLORS.Border, 0.2, 1)
 
 local KeyBox = Instance.new("TextBox")
-KeyBox.Name = "KeyBox"
 KeyBox.BackgroundTransparency = 1
 KeyBox.ClearTextOnFocus = false
 KeyBox.Font = Enum.Font.Code
-KeyBox.PlaceholderColor3 = Color3.fromRGB(94, 101, 126)
-KeyBox.PlaceholderText = "AIRESZ-XXXX-XXXX-XXXX-XXXX"
-KeyBox.Position = UDim2.fromOffset(14, 0)
-KeyBox.Size = UDim2.new(1, -56, 1, 0)
+KeyBox.PlaceholderColor3 = Color3.fromRGB(83, 92, 116)
+KeyBox.PlaceholderText = "AIRESZ-XXXX-XXXX-XXXX"
+KeyBox.Position = UDim2.fromOffset(13, 0)
+KeyBox.Size = UDim2.new(1, -98, 1, 0)
 KeyBox.Text = ""
-KeyBox.TextColor3 = Color3.fromRGB(235, 238, 249)
-KeyBox.TextSize = 13
+KeyBox.TextColor3 = COLORS.Text
+KeyBox.TextSize = 12
 KeyBox.TextXAlignment = Enum.TextXAlignment.Left
 KeyBox.Parent = InputHolder
 
-local ClearButton = Instance.new("TextButton")
-ClearButton.BackgroundTransparency = 1
-ClearButton.Font = Enum.Font.GothamBold
-ClearButton.Position = UDim2.new(1, -42, 0, 0)
-ClearButton.Size = UDim2.fromOffset(42, 48)
-ClearButton.Text = "×"
-ClearButton.TextColor3 = Color3.fromRGB(107, 114, 139)
-ClearButton.TextSize = 18
-ClearButton.Parent = InputHolder
+local EyeButton = button(InputHolder, "ShowHide", "HIDE", UDim2.new(1, -76, 0, 8), UDim2.fromOffset(62, 32), Color3.fromRGB(29, 34, 50))
+EyeButton.TextSize = 9
 
-local StatusDot = Instance.new("Frame")
-StatusDot.BackgroundColor3 = Color3.fromRGB(124, 132, 157)
-StatusDot.BorderSizePixel = 0
-StatusDot.Position = UDim2.fromOffset(0, 98)
-StatusDot.Size = UDim2.fromOffset(8, 8)
-StatusDot.Parent = Content
+local HelperDot = Instance.new("Frame")
+HelperDot.BackgroundColor3 = COLORS.Muted
+HelperDot.BorderSizePixel = 0
+HelperDot.Position = UDim2.fromOffset(15, 97)
+HelperDot.Size = UDim2.fromOffset(6, 6)
+HelperDot.Parent = KeyCard
+corner(HelperDot, 6)
 
-local StatusCorner = Instance.new("UICorner")
-StatusCorner.CornerRadius = UDim.new(1, 0)
-StatusCorner.Parent = StatusDot
+local StatusText = label(KeyCard, "Waiting for your key", UDim2.fromOffset(28, 89), UDim2.new(1, -42, 0, 20), Enum.Font.Gotham, 9, COLORS.Muted)
 
-local Status = Instance.new("TextLabel")
-Status.BackgroundTransparency = 1
-Status.Font = Enum.Font.Gotham
-Status.Position = UDim2.fromOffset(15, 90)
-Status.Size = UDim2.new(1, -15, 0, 24)
-Status.Text = "Waiting for a key"
-Status.TextColor3 = Color3.fromRGB(135, 142, 166)
-Status.TextSize = 11
-Status.TextTruncate = Enum.TextTruncate.AtEnd
-Status.TextXAlignment = Enum.TextXAlignment.Left
-Status.Parent = Content
+local ActionRow = Instance.new("Frame")
+ActionRow.BackgroundTransparency = 1
+ActionRow.Position = UDim2.fromOffset(0, 126)
+ActionRow.Size = UDim2.new(1, 0, 0, 46)
+ActionRow.Parent = Content
 
-local ButtonRow = Instance.new("Frame")
-ButtonRow.BackgroundTransparency = 1
-ButtonRow.Position = UDim2.fromOffset(0, 124)
-ButtonRow.Size = UDim2.new(1, 0, 0, 46)
-ButtonRow.Parent = Content
+local GetKeyButton = button(ActionRow, "GetKey", "GET KEY", UDim2.fromOffset(0, 0), UDim2.new(0.36, -5, 1, 0), Color3.fromRGB(27, 31, 46))
+local VerifyButton = button(ActionRow, "Verify", "VERIFY & CONTINUE", UDim2.new(0.36, 5, 0, 0), UDim2.new(0.64, -5, 1, 0), COLORS.Purple)
+VerifyButton.Text = ""
 
-local GetKeyButton = Instance.new("TextButton")
-GetKeyButton.BackgroundColor3 = Color3.fromRGB(27, 30, 43)
-GetKeyButton.BorderSizePixel = 0
-GetKeyButton.Size = UDim2.new(0.37, -5, 1, 0)
-GetKeyButton.AutoButtonColor = false
-GetKeyButton.Font = Enum.Font.GothamSemibold
-GetKeyButton.Text = "GET KEY"
-GetKeyButton.TextColor3 = Color3.fromRGB(185, 191, 214)
-GetKeyButton.TextSize = 12
-GetKeyButton.Parent = ButtonRow
+local verifyGradient = Instance.new("UIGradient")
+verifyGradient.Color = ColorSequence.new(COLORS.Purple, COLORS.Blue)
+verifyGradient.Rotation = 15
+verifyGradient.Parent = VerifyButton
 
-local GetKeyCorner = Instance.new("UICorner")
-GetKeyCorner.CornerRadius = UDim.new(0, 10)
-GetKeyCorner.Parent = GetKeyButton
+local VerifyButtonText = label(
+    VerifyButton,
+    "VERIFY & CONTINUE",
+    UDim2.fromScale(0, 0),
+    UDim2.fromScale(1, 1),
+    Enum.Font.GothamSemibold,
+    11,
+    Color3.fromRGB(255, 255, 255)
+)
+VerifyButtonText.TextXAlignment = Enum.TextXAlignment.Center
+VerifyButtonText.ZIndex = VerifyButton.ZIndex + 1
 
-local VerifyButton = Instance.new("TextButton")
-VerifyButton.AnchorPoint = Vector2.new(1, 0)
-VerifyButton.BackgroundColor3 = Color3.fromRGB(91, 103, 255)
-VerifyButton.BorderSizePixel = 0
-VerifyButton.Position = UDim2.fromScale(1, 0)
-VerifyButton.Size = UDim2.new(0.63, -5, 1, 0)
-VerifyButton.AutoButtonColor = false
-VerifyButton.Font = Enum.Font.GothamBold
-VerifyButton.Text = "VERIFY & LOAD"
-VerifyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-VerifyButton.TextSize = 12
-VerifyButton.Parent = ButtonRow
+local SessionCard = Instance.new("Frame")
+SessionCard.BackgroundColor3 = COLORS.Card
+SessionCard.BorderSizePixel = 0
+SessionCard.Position = UDim2.fromOffset(0, 182)
+SessionCard.Size = UDim2.new(1, 0, 0, 64)
+SessionCard.Parent = Content
+corner(SessionCard, 12)
+stroke(SessionCard, COLORS.Border, 0.35, 1)
 
-local VerifyCorner = Instance.new("UICorner")
-VerifyCorner.CornerRadius = UDim.new(0, 10)
-VerifyCorner.Parent = VerifyButton
+local SessionIcon = Instance.new("Frame")
+SessionIcon.BackgroundColor3 = Color3.fromRGB(39, 34, 61)
+SessionIcon.BorderSizePixel = 0
+SessionIcon.Position = UDim2.fromOffset(12, 12)
+SessionIcon.Size = UDim2.fromOffset(40, 40)
+SessionIcon.Parent = SessionCard
+corner(SessionIcon, 10)
 
-local VerifyGradient = Instance.new("UIGradient")
-VerifyGradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(118, 82, 255)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(49, 185, 255))
-})
-VerifyGradient.Rotation = 15
-VerifyGradient.Parent = VerifyButton
+local SessionGlyph = label(SessionIcon, "◆", UDim2.fromScale(0, 0), UDim2.fromScale(1, 1), Enum.Font.GothamBold, 14, Color3.fromRGB(181, 164, 255))
+SessionGlyph.TextXAlignment = Enum.TextXAlignment.Center
 
+label(SessionCard, "License status", UDim2.fromOffset(63, 10), UDim2.new(1, -175, 0, 19), Enum.Font.GothamSemibold, 11)
+local SessionText = label(SessionCard, "Verify to view expiry information", UDim2.fromOffset(63, 31), UDim2.new(1, -76, 0, 17), Enum.Font.Gotham, 9, COLORS.Muted)
+local SessionState = label(SessionCard, "UNVERIFIED", UDim2.new(1, -112, 0, 10), UDim2.fromOffset(98, 19), Enum.Font.GothamBold, 9, COLORS.Yellow)
+SessionState.TextXAlignment = Enum.TextXAlignment.Right
+
+local SaveRow = Instance.new("Frame")
+SaveRow.BackgroundColor3 = COLORS.Card
+SaveRow.BorderSizePixel = 0
+SaveRow.Position = UDim2.fromOffset(0, 256)
+SaveRow.Size = UDim2.new(1, 0, 0, 48)
+SaveRow.Parent = Content
+corner(SaveRow, 11)
+stroke(SaveRow, COLORS.Border, 0.4, 1)
+
+label(SaveRow, "Remember this key", UDim2.fromOffset(13, 5), UDim2.new(1, -95, 0, 20), Enum.Font.GothamSemibold, 10)
+label(SaveRow, "Auto-login when you execute again", UDim2.fromOffset(13, 23), UDim2.new(1, -95, 0, 17), Enum.Font.Gotham, 8, COLORS.Muted)
+
+local SaveToggle = Instance.new("TextButton")
+SaveToggle.AutoButtonColor = false
+SaveToggle.BackgroundColor3 = COLORS.Purple
+SaveToggle.BorderSizePixel = 0
+SaveToggle.Position = UDim2.new(1, -58, 0, 12)
+SaveToggle.Size = UDim2.fromOffset(44, 24)
+SaveToggle.Text = ""
+SaveToggle.Parent = SaveRow
+corner(SaveToggle, 12)
+
+local ToggleKnob = Instance.new("Frame")
+ToggleKnob.AnchorPoint = Vector2.new(0.5, 0.5)
+ToggleKnob.BackgroundColor3 = Color3.new(1, 1, 1)
+ToggleKnob.BorderSizePixel = 0
+ToggleKnob.Position = UDim2.new(1, -12, 0.5, 0)
+ToggleKnob.Size = UDim2.fromOffset(18, 18)
+ToggleKnob.Parent = SaveToggle
+corner(ToggleKnob, 9)
+
+local BottomRow = Instance.new("Frame")
+BottomRow.BackgroundTransparency = 1
+BottomRow.Position = UDim2.fromOffset(0, 314)
+BottomRow.Size = UDim2.new(1, 0, 0, 38)
+BottomRow.Parent = Content
+
+local DiscordButton = button(BottomRow, "Discord", "COPY DISCORD", UDim2.fromOffset(0, 0), UDim2.new(0.5, -5, 1, 0), Color3.fromRGB(27, 31, 46))
+DiscordButton.TextColor3 = Color3.fromRGB(181, 190, 255)
+local ResetButton = button(BottomRow, "Reset", "RESET KEY", UDim2.new(0.5, 5, 0, 0), UDim2.new(0.5, -5, 1, 0), Color3.fromRGB(45, 25, 35))
+ResetButton.TextColor3 = Color3.fromRGB(255, 151, 173)
+
+local saveEnabled = true
+local keyVisible = true
 local verifying = false
 local minimized = false
 local currentSession = nil
@@ -366,12 +459,69 @@ local REKEY_CODES = {
 
 local NON_REKEY_CODES = {
     NETWORK_UNAVAILABLE = true,
-    SERVER_UNAVAILABLE = true
+    SERVER_UNAVAILABLE = true,
+    MAINTENANCE = true,
+    SERVER_MAINTENANCE = true,
+    SERVICE_UNAVAILABLE = true,
+    RATE_LIMITED = true
 }
+
+local Mask = label(InputHolder, "", KeyBox.Position, KeyBox.Size, Enum.Font.Code, 12, COLORS.Text)
+Mask.Visible = false
+Mask.ZIndex = KeyBox.ZIndex + 1
+
+local function notify(title, text)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = title,
+            Text = text,
+            Duration = 5
+        })
+    end)
+end
+
+local function setStatus(text, state)
+    local colors = {
+        idle = COLORS.Muted,
+        loading = COLORS.Yellow,
+        success = COLORS.Green,
+        error = COLORS.Red
+    }
+    local color = colors[state] or colors.idle
+    StatusText.Text = text
+    StatusText.TextColor3 = color
+    HelperDot.BackgroundColor3 = color
+end
+
+local function updateMask()
+    Mask.Text = string.rep("•", utf8.len(KeyBox.Text) or #KeyBox.Text)
+end
+
+local function setKeyVisible(value)
+    keyVisible = value
+    KeyBox.TextTransparency = value and 0 or 1
+    Mask.Visible = not value
+    EyeButton.Text = value and "HIDE" or "SHOW"
+    updateMask()
+end
+
+local function setSaveEnabled(value)
+    saveEnabled = value
+    TweenService:Create(SaveToggle, TweenInfo.new(0.18), {
+        BackgroundColor3 = value and COLORS.Purple or Color3.fromRGB(47, 53, 69)
+    }):Play()
+    TweenService:Create(ToggleKnob, TweenInfo.new(0.18, Enum.EasingStyle.Quart), {
+        Position = value and UDim2.new(1, -12, 0.5, 0) or UDim2.new(0, 12, 0.5, 0)
+    }):Play()
+    setStatus(value and "Auto-login enabled" or "Key will not be saved", "idle")
+end
+
+local function trim(text)
+    return tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", "")
+end
 
 local function requiresNewKey(reason, code)
     local normalizedCode = tostring(code or "UNKNOWN"):upper()
-
     if REKEY_CODES[normalizedCode] then
         return true
     end
@@ -380,6 +530,15 @@ local function requiresNewKey(reason, code)
     end
 
     local message = tostring(reason or ""):lower()
+    if message:find("maintenance", 1, true)
+        or message:find("network", 1, true)
+        or message:find("unavailable", 1, true)
+        or message:find("timeout", 1, true)
+        or message:find("rate limit", 1, true)
+    then
+        return false
+    end
+
     for _, marker in ipairs({
         "expired", "revoked", "deleted", "inactive", "invalid key",
         "key not found", "unknown key", "access denied", "unauthorized"
@@ -392,115 +551,55 @@ local function requiresNewKey(reason, code)
     return false
 end
 
-local function setStatus(text, state)
-    Status.Text = tostring(text)
-
-    local colors = {
-        idle = Color3.fromRGB(124, 132, 157),
-        loading = Color3.fromRGB(255, 190, 75),
-        success = Color3.fromRGB(65, 211, 139),
-        error = Color3.fromRGB(255, 91, 112)
-    }
-
-    local color = colors[state] or colors.idle
-    TweenService:Create(StatusDot, TweenInfo.new(0.18), {
-        BackgroundColor3 = color
-    }):Play()
-
-    TweenService:Create(Status, TweenInfo.new(0.18), {
-        TextColor3 = state == "error" and Color3.fromRGB(255, 142, 157)
-            or state == "success" and Color3.fromRGB(117, 232, 174)
-            or Color3.fromRGB(135, 142, 166)
-    }):Play()
-end
-
-local function trim(text)
-    return tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", "")
-end
-
-local function deleteSavedKey()
-    local deleted = false
-
+local function deleteSavedKey(markRekey)
     if type(isfile) == "function" and type(delfile) == "function" then
         for _, path in ipairs({KEY_FILE, FALLBACK_KEY_FILE}) do
-            local ok = pcall(function()
+            pcall(function()
                 if isfile(path) then
                     delfile(path)
-                    deleted = true
                 end
             end)
-
-            if not ok then
-                -- Continue checking the fallback path.
-            end
         end
     end
 
-    local env = type(getgenv) == "function" and getgenv() or _G
-    env.AIRESZ_SAVED_KEY = nil
-    env.AIRESZ_KEY = nil
-    env.AIRESZ_REKEY_REQUIRED = true
-    return deleted
+    RuntimeEnv.AIRESZ_SAVED_KEY = nil
+    RuntimeEnv.AIRESZ_REKEY_REQUIRED = markRekey ~= false
 end
 
 local function saveKey(key)
     key = trim(key)
-
     if key == "" then
-        return false, "Enter a key before saving"
+        return false, "Key is empty"
     end
 
-    -- Runtime fallback. This survives a GUI reopen in the same executor session,
-    -- even when the executor has no file API.
-    local env = type(getgenv) == "function" and getgenv() or _G
-    env.AIRESZ_SAVED_KEY = key
-    env.AIRESZ_KEY = key
-    env.AIRESZ_REKEY_REQUIRED = false
+    RuntimeEnv.AIRESZ_SAVED_KEY = key
+    RuntimeEnv.AIRESZ_REKEY_REQUIRED = false
 
     if type(writefile) ~= "function" then
         return false, "Executor does not support writefile"
     end
 
-    local errors = {}
-
-    -- Preferred location: AireszHub/saved-key.txt
-    local folderReady = true
+    local folderReady = false
     if type(isfolder) == "function" and type(makefolder) == "function" then
-        local ok, err = pcall(function()
+        folderReady = pcall(function()
             if not isfolder(KEY_FOLDER) then
                 makefolder(KEY_FOLDER)
             end
         end)
-        folderReady = ok
-        if not ok then
-            table.insert(errors, tostring(err))
-        end
-    elseif type(isfolder) ~= "function" or type(makefolder) ~= "function" then
-        folderReady = false
     end
 
-    if folderReady then
-        local ok, err = pcall(writefile, KEY_FILE, key)
-        if ok then
-            return true, "Key saved"
-        end
-        table.insert(errors, tostring(err))
+    if folderReady and pcall(writefile, KEY_FILE, key) then
+        return true
+    end
+    if pcall(writefile, FALLBACK_KEY_FILE, key) then
+        return true
     end
 
-    -- Fallback for executors that support writefile but not folders.
-    local ok, err = pcall(writefile, FALLBACK_KEY_FILE, key)
-    if ok then
-        return true, "Key saved"
-    end
-    table.insert(errors, tostring(err))
-
-    return false, "Could not save key: " .. table.concat(errors, " | ")
+    return false, "Could not write saved key"
 end
 
 local function loadSavedKey()
-    local env = type(getgenv) == "function" and getgenv() or _G
-    local key = trim(env.AIRESZ_SAVED_KEY)
-
+    local key = trim(RuntimeEnv.AIRESZ_SAVED_KEY)
     if key == "" and type(isfile) == "function" and type(readfile) == "function" then
         for _, path in ipairs({KEY_FILE, FALLBACK_KEY_FILE}) do
             local ok, result = pcall(function()
@@ -508,7 +607,6 @@ local function loadSavedKey()
                     return readfile(path)
                 end
             end)
-
             result = trim(result)
             if ok and result ~= "" then
                 key = result
@@ -516,16 +614,57 @@ local function loadSavedKey()
             end
         end
     end
-
     return key
+end
+
+local function formatDuration(seconds)
+    seconds = math.max(0, math.floor(tonumber(seconds) or 0))
+    local days = math.floor(seconds / 86400)
+    local hours = math.floor(seconds % 86400 / 3600)
+    local minutes = math.floor(seconds % 3600 / 60)
+
+    if days > 0 then
+        return string.format("%dd %dh %dm", days, hours, minutes)
+    end
+    if hours > 0 then
+        return string.format("%dh %dm", hours, minutes)
+    end
+    return string.format("%dm", minutes)
+end
+
+local function getRemainingText(...)
+    for index = 1, select("#", ...) do
+        local source = select(index, ...)
+        if type(source) == "table" then
+            for _, field in ipairs({
+                "remainingSeconds", "keyRemainingSeconds", "expiresIn",
+                "ttlSeconds", "keyTtlSeconds", "remaining"
+            }) do
+                local value = tonumber(source[field])
+                if value then
+                    return formatDuration(value)
+                end
+            end
+
+            for _, field in ipairs({"expiresAt", "keyExpiresAt", "expiry"}) do
+                local value = tonumber(source[field])
+                if value then
+                    if value > 1000000000000 then
+                        value = math.floor(value / 1000)
+                    end
+                    return formatDuration(value - os.time())
+                end
+            end
+        end
+    end
 end
 
 local function setVerifyBusy(value)
     verifying = value
-    VerifyButton.Text = value and "VERIFYING..." or "VERIFY & LOAD"
+    VerifyButtonText.Text = value and "VERIFYING..." or "VERIFY & CONTINUE"
     VerifyButton.Active = not value
     KeyBox.TextEditable = not value
-    VerifyButton.BackgroundTransparency = value and 0.18 or 0
+    VerifyButton.BackgroundTransparency = value and 0.15 or 0
 end
 
 local function showKeyGui(message, state)
@@ -534,30 +673,18 @@ local function showKeyGui(message, state)
     end
 
     ScreenGui.Enabled = true
-    Main.Visible = true
-    minimized = false
+    Sidebar.Visible = true
     Content.Visible = true
-    Divider.Visible = true
+    Header.Position = UDim2.fromOffset(152, 0)
+    Header.Size = UDim2.new(1, -152, 0, 70)
+    Main.Size = UDim2.fromOffset(560, 440)
     MinimizeButton.Text = "—"
+    minimized = false
     setVerifyBusy(false)
 
     if message then
         setStatus(message, state or "idle")
     end
-
-    -- Entry animation only when the GUI actually needs to be shown.
-    Main.Size = UDim2.fromOffset(430, 230)
-    Main.BackgroundTransparency = 1
-    Dim.BackgroundTransparency = 1
-
-    TweenService:Create(Dim, TweenInfo.new(0.25), {
-        BackgroundTransparency = 0.45
-    }):Play()
-
-    TweenService:Create(Main, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        Size = UDim2.fromOffset(430, 270),
-        BackgroundTransparency = 0
-    }):Play()
 end
 
 local function hideKeyGui()
@@ -573,7 +700,7 @@ local function verifyAndLoad(keyOverride, silentSavedKey)
 
     local key = trim(keyOverride or KeyBox.Text)
     if key == "" then
-        showKeyGui("Please enter your key", "error")
+        showKeyGui("Enter a valid key first", "error")
         notify("Airesz Key System", "Enter a valid key first.")
         return
     end
@@ -589,16 +716,10 @@ local function verifyAndLoad(keyOverride, silentSavedKey)
     task.spawn(function()
         local verified = false
         local verificationCode = nil
-
         local ok, err = pcall(function()
             local cacheBuster = tostring(os.time()) .. tostring(math.random(1000, 9999))
             local source = game:HttpGet(AUTH_CLIENT_URL .. "?v=" .. cacheBuster, true)
-
-            -- Keeps the GUI working even if the public client still contains its placeholder.
-            source = source:gsub(
-                "https://YOUR%-WORKER%.workers%.dev",
-                WORKER_URL
-            )
+            source = source:gsub("https://YOUR%-WORKER%.workers%.dev", WORKER_URL)
 
             local compileClient, compileError = loadstring(source)
             if not compileClient then
@@ -607,7 +728,7 @@ local function verifyAndLoad(keyOverride, silentSavedKey)
 
             local startAireszSession = compileClient()
             if type(startAireszSession) ~= "function" then
-                error("roblox-client.lua must end with: return startAireszSession")
+                error("Authorization client did not return a start function")
             end
 
             if not silentSavedKey then
@@ -619,39 +740,48 @@ local function verifyAndLoad(keyOverride, silentSavedKey)
                     return
                 end
 
-                warn("[AIRESZ] Access stopped:", reason)
                 currentSession = nil
-
                 if requiresNewKey(reason, code) then
-                    deleteSavedKey()
+                    deleteSavedKey(true)
                     KeyBox.Text = ""
-                    showKeyGui("Key expired or inactive. Enter a new key.", "error")
-                    notify("Airesz Key System", "Your key is no longer active. Enter a new key.")
+                    SessionState.Text = "EXPIRED"
+                    SessionState.TextColor3 = COLORS.Red
+                    SessionText.Text = "Enter a new key to continue"
+                    showKeyGui("Key expired, revoked or invalid", "error")
+                    notify("Airesz Key System", "Your saved key was removed. Enter a new key.")
                 else
                     KeyBox.Text = key
-                    showKeyGui("Access stopped: " .. tostring(reason), "error")
-                    notify("Airesz Key System", tostring(reason))
+                    SessionState.Text = "PAUSED"
+                    SessionState.TextColor3 = COLORS.Yellow
+                    SessionText.Text = "Saved key kept safely"
+                    showKeyGui(tostring(reason or "Service temporarily unavailable"), "error")
+                    notify("Airesz Key System", "Maintenance or connection issue. Saved key was kept.")
                 end
             end)
 
             if not session then
                 verificationCode = resultCode
-                error(tostring(resultOrError or "Key verification failed."))
+                error(tostring(resultOrError or "Key verification failed"))
             end
 
             verified = true
             currentSession = session
+            local remainingText = getRemainingText(resultOrError, session)
 
-            local saved, saveMessage = saveKey(key)
-            if not saved then
-                warn("[AIRESZ] Auto-save key failed:", saveMessage)
+            if saveEnabled then
+                local saved, saveError = saveKey(key)
+                if not saved then
+                    warn("[AIRESZ] Could not save key:", saveError)
+                end
+            else
+                deleteSavedKey(false)
             end
 
-            -- Keep the Key GUI alive but hidden so heartbeat denial can show it
-            -- again without requiring another execute or a rejoin.
-            if not silentSavedKey then
-                notify("Airesz Key System", "Key verified. Loading script...")
-            end
+            SessionState.Text = "ACTIVE"
+            SessionState.TextColor3 = COLORS.Green
+            SessionText.Text = remainingText
+                and ("Key active • " .. remainingText .. " remaining")
+                or "Key active • session authorized"
 
             hideKeyGui()
 
@@ -659,68 +789,113 @@ local function verifyAndLoad(keyOverride, silentSavedKey)
             if not loaded then
                 session:Stop("Private script failed to load.")
                 currentSession = nil
-                error(tostring(loadError or "Private script could not be loaded."))
+                error(tostring(loadError or "Private script could not be loaded"))
             end
 
-            notify("Airesz Key System", "Script loaded successfully.")
+            notify(
+                "Airesz Key System",
+                remainingText
+                    and ("Key active • " .. remainingText .. " remaining")
+                    or "Script loaded successfully."
+            )
         end)
 
         if not ok then
-            local message = tostring(err)
-            message = message:gsub("^.-:%d+:%s*", "")
-
-            if silentSavedKey and not verified then
-                warn("[AIRESZ] Saved key verification failed:", message)
-
-                if requiresNewKey(message, verificationCode) then
-                    -- Prevent an invalid/expired saved key from causing an endless auto-login loop.
-                    deleteSavedKey()
-                    KeyBox.Text = ""
-                    showKeyGui("Saved key is no longer valid. Enter a new key.", "error")
-                    notify("Airesz Key System", "Saved key expired or invalid.")
-                else
-                    KeyBox.Text = key
-                    showKeyGui("Could not verify saved key: " .. message, "error")
-                    notify("Airesz Key System", "Verification unavailable. Your saved key was kept.")
-                end
-            elseif ScreenGui and ScreenGui.Parent then
-                showKeyGui(message, "error")
-                notify(verified and "Script Load Failed" or "Verification Failed", message)
+            local message = tostring(err):gsub("^.-:%d+:%s*", "")
+            if not verified and requiresNewKey(message, verificationCode) then
+                deleteSavedKey(true)
+                KeyBox.Text = ""
+                showKeyGui("Saved key expired or invalid", "error")
+                notify("Airesz Key System", "Saved key expired or invalid and was removed.")
+            elseif not verified then
+                KeyBox.Text = key
+                showKeyGui("Verification unavailable: " .. message, "error")
+                notify("Airesz Key System", "Maintenance or connection issue. Saved key was kept.")
             else
-                -- Verification succeeded and the GUI was already closed;
-                -- this means the private script failed while loading.
-                warn("[AIRESZ] Script load failed:", message)
+                showKeyGui("Script load failed: " .. message, "error")
                 notify("Script Load Failed", message)
             end
         end
     end)
 end
 
-ClearButton.MouseButton1Click:Connect(function()
-    if verifying then return end
-    KeyBox.Text = ""
-    deleteSavedKey()
-    setStatus("Saved key cleared", "idle")
+KeyBox:GetPropertyChangedSignal("Text"):Connect(updateMask)
+KeyBox.Focused:Connect(function()
+    TweenService:Create(inputStroke, TweenInfo.new(0.15), {
+        Color = COLORS.Purple,
+        Transparency = 0
+    }):Play()
+end)
+KeyBox.FocusLost:Connect(function(enterPressed)
+    TweenService:Create(inputStroke, TweenInfo.new(0.15), {
+        Color = COLORS.Border,
+        Transparency = 0.2
+    }):Play()
+    if enterPressed then
+        verifyAndLoad(nil, false)
+    end
+end)
+
+EyeButton.MouseButton1Click:Connect(function()
+    setKeyVisible(not keyVisible)
+end)
+SaveToggle.MouseButton1Click:Connect(function()
+    setSaveEnabled(not saveEnabled)
+end)
+VerifyButton.MouseButton1Click:Connect(function()
+    verifyAndLoad(nil, false)
 end)
 
 GetKeyButton.MouseButton1Click:Connect(function()
     if type(setclipboard) == "function" then
         setclipboard(GET_KEY_URL)
-        setStatus("Key page link copied to clipboard", "success")
+        setStatus("Key link copied", "success")
         notify("Airesz Key System", "Key page link copied.")
     else
-        setStatus("Open: " .. GET_KEY_URL, "idle")
-        notify("Get Key", GET_KEY_URL)
+        setStatus("Clipboard is not supported", "error")
     end
 end)
 
-VerifyButton.MouseButton1Click:Connect(function()
-    verifyAndLoad(nil, false)
-end)
-KeyBox.FocusLost:Connect(function(enterPressed)
-    if enterPressed then
-        verifyAndLoad(nil, false)
+DiscordButton.MouseButton1Click:Connect(function()
+    if type(setclipboard) == "function" then
+        setclipboard(DISCORD_URL)
+        setStatus("Discord link copied", "success")
+        notify("Airesz Key System", "Discord link copied.")
+    else
+        setStatus("Clipboard is not supported", "error")
     end
+end)
+
+ResetButton.MouseButton1Click:Connect(function()
+    if verifying then
+        return
+    end
+    deleteSavedKey(true)
+    KeyBox.Text = ""
+    SessionState.Text = "UNVERIFIED"
+    SessionState.TextColor3 = COLORS.Yellow
+    SessionText.Text = "Verify to view expiry information"
+    setStatus("Saved key removed", "idle")
+    notify("Airesz Key System", "Saved key removed.")
+end)
+
+addInteraction(GetKeyButton, Color3.fromRGB(27, 31, 46), COLORS.CardHover)
+addInteraction(DiscordButton, Color3.fromRGB(27, 31, 46), COLORS.CardHover)
+addInteraction(ResetButton, Color3.fromRGB(45, 25, 35), Color3.fromRGB(65, 31, 45))
+addInteraction(EyeButton, Color3.fromRGB(29, 34, 50), Color3.fromRGB(42, 49, 70))
+addInteraction(MinimizeButton, Color3.fromRGB(27, 31, 45), COLORS.CardHover)
+addInteraction(CloseButton, Color3.fromRGB(27, 31, 45), Color3.fromRGB(67, 31, 44))
+
+MinimizeButton.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    Sidebar.Visible = not minimized
+    Content.Visible = not minimized
+    Header.Position = minimized and UDim2.fromOffset(0, 0) or UDim2.fromOffset(152, 0)
+    Header.Size = minimized and UDim2.new(1, 0, 0, 70) or UDim2.new(1, -152, 0, 70)
+    MinimizeButton.Text = minimized and "+" or "—"
+    TweenService:Create(Main, TweenInfo.new(0.2, Enum.EasingStyle.Quart), {
+        Size = minimized and UDim2.fromOffset(408, 74) or UDim2.fromOffset(560, 440)
+    }):Play()
 end)
 
 CloseButton.MouseButton1Click:Connect(function()
@@ -728,109 +903,84 @@ CloseButton.MouseButton1Click:Connect(function()
         setStatus("Wait until verification finishes", "loading")
         return
     end
-    if currentSession and type(currentSession.IsAllowed) == "function" and currentSession:IsAllowed() then
+
+    local allowed = false
+    if currentSession and type(currentSession.IsAllowed) == "function" then
+        local ok, result = pcall(function()
+            return currentSession:IsAllowed()
+        end)
+        allowed = ok and result == true
+    end
+
+    if allowed then
         hideKeyGui()
     else
         setStatus("Enter a valid key to continue", "error")
-        notify("Airesz Key System", "The key window must stay open until access is verified.")
+        notify("Airesz Key System", "Verify a valid key before closing this window.")
     end
 end)
 
-MinimizeButton.MouseButton1Click:Connect(function()
-    minimized = not minimized
-    Content.Visible = not minimized
-    Divider.Visible = not minimized
-    MinimizeButton.Text = minimized and "+" or "—"
+local dragging = false
+local dragStart
+local startPosition
 
-    TweenService:Create(Main, TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-        Size = minimized and UDim2.fromOffset(430, 62) or UDim2.fromOffset(430, 270)
-    }):Play()
+Header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch
+    then
+        dragging = true
+        dragStart = input.Position
+        startPosition = Main.Position
+    end
 end)
 
-GetKeyButton.MouseEnter:Connect(function()
-    TweenService:Create(GetKeyButton, TweenInfo.new(0.15), {
-        BackgroundColor3 = Color3.fromRGB(37, 41, 58),
-        TextColor3 = Color3.fromRGB(230, 233, 245)
-    }):Play()
-end)
-GetKeyButton.MouseLeave:Connect(function()
-    TweenService:Create(GetKeyButton, TweenInfo.new(0.15), {
-        BackgroundColor3 = Color3.fromRGB(27, 30, 43),
-        TextColor3 = Color3.fromRGB(185, 191, 214)
-    }):Play()
-end)
-
-VerifyButton.MouseEnter:Connect(function()
-    if verifying then return end
-    TweenService:Create(VerifyButton, TweenInfo.new(0.15), {
-        Size = UDim2.new(0.63, -2, 1, 0)
-    }):Play()
-end)
-VerifyButton.MouseLeave:Connect(function()
-    TweenService:Create(VerifyButton, TweenInfo.new(0.15), {
-        Size = UDim2.new(0.63, -5, 1, 0)
-    }):Play()
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (
+        input.UserInputType == Enum.UserInputType.MouseMovement
+        or input.UserInputType == Enum.UserInputType.Touch
+    ) then
+        local delta = input.Position - dragStart
+        Main.Position = UDim2.new(
+            startPosition.X.Scale,
+            startPosition.X.Offset + delta.X,
+            startPosition.Y.Scale,
+            startPosition.Y.Offset + delta.Y
+        )
+    end
 end)
 
-KeyBox.Focused:Connect(function()
-    TweenService:Create(InputStroke, TweenInfo.new(0.15), {
-        Color = Color3.fromRGB(99, 111, 255),
-        Transparency = 0
-    }):Play()
-end)
-KeyBox.FocusLost:Connect(function()
-    TweenService:Create(InputStroke, TweenInfo.new(0.15), {
-        Color = Color3.fromRGB(48, 53, 72),
-        Transparency = 0.15
-    }):Play()
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch
+    then
+        dragging = false
+    end
 end)
 
--- Dragging support for mouse and touch.
-do
-    local dragging = false
-    local dragStart
-    local startPosition
-    local dragInput
+local interfaceScale = Instance.new("UIScale")
+interfaceScale.Parent = Main
 
-    TopBar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-            or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPosition = Main.Position
+local function updateScale()
+    local camera = workspace.CurrentCamera
+    if not camera then
+        return
+    end
 
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-
-    TopBar.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement
-            or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - dragStart
-            Main.Position = UDim2.new(
-                startPosition.X.Scale,
-                startPosition.X.Offset + delta.X,
-                startPosition.Y.Scale,
-                startPosition.Y.Offset + delta.Y
-            )
-        end
-    end)
+    local viewport = camera.ViewportSize
+    interfaceScale.Scale = math.clamp(math.min(viewport.X / 620, viewport.Y / 500), 0.68, 1)
 end
 
-local savedKey = loadSavedKey()
+updateScale()
+if workspace.CurrentCamera then
+    workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
+end
 
+setKeyVisible(true)
+setSaveEnabled(true)
+
+local savedKey = loadSavedKey()
 if savedKey ~= "" then
-    -- Valid saved key: no key GUI is shown; verify and load directly.
+    KeyBox.Text = savedKey
     verifyAndLoad(savedKey, true)
 else
     showKeyGui("Waiting for a key", "idle")
