@@ -665,6 +665,12 @@ local function setVerifyBusy(value)
     VerifyButton.Active = not value
     KeyBox.TextEditable = not value
     VerifyButton.BackgroundTransparency = value and 0.15 or 0
+
+    if value then
+        SessionState.Text = "VERIFYING"
+        SessionState.TextColor3 = COLORS.Yellow
+        SessionText.Text = "Checking license key and device..."
+    end
 end
 
 local function showKeyGui(message, state)
@@ -783,6 +789,11 @@ local function verifyAndLoad(keyOverride, silentSavedKey)
                 and ("Key active • " .. remainingText .. " remaining")
                 or "Key active • session authorized"
 
+            if not silentSavedKey then
+                setStatus("Access granted • loading script...", "success")
+                task.wait(0.5)
+            end
+
             hideKeyGui()
 
             local loaded, loadError = session:LoadLatestScript()
@@ -808,10 +819,16 @@ local function verifyAndLoad(keyOverride, silentSavedKey)
                 showKeyGui("Saved key expired or invalid", "error")
                 notify("Airesz Key System", "Saved key expired or invalid and was removed.")
             elseif not verified then
+                SessionState.Text = "UNAVAILABLE"
+                SessionState.TextColor3 = COLORS.Yellow
+                SessionText.Text = "Saved key kept • try again later"
                 KeyBox.Text = key
                 showKeyGui("Verification unavailable: " .. message, "error")
                 notify("Airesz Key System", "Maintenance or connection issue. Saved key was kept.")
             else
+                SessionState.Text = "LOAD ERROR"
+                SessionState.TextColor3 = COLORS.Red
+                SessionText.Text = "Authorization passed but script failed to load"
                 showKeyGui("Script load failed: " .. message, "error")
                 notify("Script Load Failed", message)
             end
