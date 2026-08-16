@@ -932,8 +932,7 @@ CloseButton.MouseButton1Click:Connect(function()
     if allowed then
         hideKeyGui()
     else
-        setStatus("Enter a valid key to continue", "error")
-        notify("Airesz Key System", "Verify a valid key before closing this window.")
+        hideKeyGui()
     end
 end)
 
