@@ -7,7 +7,7 @@
   <meta name="description" content="Airesz free script key system with Linkvertise, Work.ink, and LootLabs checkpoints.">
   <title>Airesz Free Script Key System</title>
   <link rel="icon" href="assets/airesz-mark.png">
-  <link rel="stylesheet" href="styles.css?v=3.12.1">
+  <link rel="stylesheet" href="styles.css?v=3.12.4">
 </head>
 <body>
   <div class="page-glow glow-a"></div>
@@ -120,6 +120,16 @@
       </aside>
     </section>
 
+    <section id="my-keys" class="my-keys shell">
+      <div class="section-label">MY KEYS</div>
+      <div class="my-keys-heading"><div><h2>Your Key History</h2><p>Keys stay recorded on the server. Close the browser and come back later to see their status again.</p></div><button id="refreshMyKeysBtn" class="secondary-button refresh-my-keys" type="button">↻ Refresh</button></div>
+      <div id="myKeysList" class="my-keys-list"><div class="empty-state">Loading key history...</div></div>
+      <div class="recover-key-card">
+        <div><strong>Recover an older key</strong><p>After a phone/browser reset, enter the key you already have. We will restore it to this device and show its current status.</p></div>
+        <div class="recover-row"><input id="recoverKeyInput" type="text" autocomplete="off" spellcheck="false" placeholder="AIRESZ-72H-XXXX-XXXX"><button id="recoverKeyBtn" class="primary-button" type="button">Recover Key</button></div>
+      </div>
+    </section>
+
     <section id="how-it-works" class="how shell">
       <div class="section-label">HOW IT WORKS</div>
       <h2>Only four simple steps</h2>
@@ -141,7 +151,7 @@
 
   <footer class="shell"><span>© 2026 Airesz. All rights reserved.</span><span>GitHub Pages · Cloudflare Workers · Discord Analytics</span></footer>
 
-  <script src="config.js?v=3.12.1"></script>
-  <script src="app.js?v=3.12.1"></script>
+  <script src="config.js?v=3.12.4"></script>
+  <script src="app.js?v=3.12.4"></script>
 </body>
 </html>

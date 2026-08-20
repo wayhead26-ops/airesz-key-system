@@ -6,11 +6,135 @@ const state = {
   providers: {},
   session: null,
   clientToken: getClientToken(),
-  busy: false
+  busy: false,
+  savedKeys: loadSavedKeys(),
+  historyKeys: []
 };
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
+
+function loadSavedKeys() {
+  try {
+    const value = JSON.parse(localStorage.getItem("airesz_saved_keys") || "[]");
+    return Array.isArray(value) ? value.slice(0, 20) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistSavedKeys() {
+  localStorage.setItem("airesz_saved_keys", JSON.stringify(state.savedKeys.slice(0, 20)));
+}
+
+function saveIssuedKey(keyData) {
+  if (!keyData?.key) return;
+  const next = {
+    id: keyData.id || null,
+    key: keyData.key,
+    prefix: keyData.prefix || keyData.key.slice(0, 20),
+    plan: keyData.plan || "",
+    provider: keyData.provider || "",
+    issuedAt: Number(keyData.issuedAt || Math.floor(Date.now() / 1000)),
+    expiresAt: keyData.expiresAt == null ? null : Number(keyData.expiresAt)
+  };
+  state.savedKeys = [next, ...state.savedKeys.filter(item => item.key !== next.key)].slice(0, 20);
+  persistSavedKeys();
+  renderMyKeys();
+}
+
+function keyStateLabel(item) {
+  const now = Math.floor(Date.now() / 1000);
+  if (item.state === "hwid_mismatch") return ["HWID Mismatch", "hwid-mismatch"];
+  if (item.state === "revoked") return ["Revoked", "revoked"];
+  if (item.state === "paused") return ["Paused", "paused"];
+  if (item.state === "expired") return ["Expired", "expired"];
+  if (item.expiresAt != null && Number(item.expiresAt) <= now) return ["Expired", "expired"];
+  if (item.expiresAt != null && Number(item.expiresAt) - now <= 86400) return ["Expiring Soon", "expiring"];
+  return ["Active", "active"];
+}
+
+function remainingText(expiresAt) {
+  if (expiresAt == null) return "Lifetime";
+  let seconds = Math.max(0, Number(expiresAt) - Math.floor(Date.now() / 1000));
+  const days = Math.floor(seconds / 86400); seconds %= 86400;
+  const hours = Math.floor(seconds / 3600); seconds %= 3600;
+  const minutes = Math.floor(seconds / 60);
+  if (days) return `${days}d ${hours}h remaining`;
+  if (hours) return `${hours}h ${minutes}m remaining`;
+  return `${minutes}m remaining`;
+}
+
+function maskKey(key) {
+  const text = String(key || "");
+  if (text.length < 12) return text;
+  return `${text.slice(0, 12)}…${text.slice(-4)}`;
+}
+
+function renderMyKeys() {
+  const target = $("#myKeysList");
+  if (!target) return;
+  const now = Math.floor(Date.now() / 1000);
+  const merged = new Map();
+  for (const item of state.historyKeys) merged.set(item.id || item.prefix, { ...item });
+  for (const item of state.savedKeys) {
+    const key = item.id || item.key;
+    const current = merged.get(key) || {};
+    merged.set(key, { ...current, ...item });
+  }
+  const items = [...merged.values()].sort((a, b) => Number(b.issuedAt || 0) - Number(a.issuedAt || 0));
+  if (!items.length) {
+    target.innerHTML = '<div class="empty-state">No saved keys yet. Generate a key and it will appear here.</div>';
+    return;
+  }
+  target.innerHTML = items.map(item => {
+    const [label, cls] = keyStateLabel(item);
+    const keyText = item.key || maskKey(item.prefix);
+    const canCopy = Boolean(item.key);
+    const action = item.state === "hwid_mismatch" ? '<span class="key-history-note">Get a new key to continue.</span>' : canCopy ? `<button class="key-history-copy" data-key="${encodeURIComponent(item.key)}">Copy Key</button>` : '<span class="key-history-note">Enter the key below to recover.</span>';
+    return `<article class="key-history-card ${cls}">
+      <div class="key-history-top"><div><span class="key-state-pill ${cls}">${label}</span><strong>${item.plan ? `${item.plan} Key` : "Airesz Key"}</strong></div><span class="key-history-time">${item.expiresAt == null ? "Lifetime" : remainingText(item.expiresAt)}</span></div>
+      <code>${canCopy ? escapeHtml(item.key) : escapeHtml(item.prefix || "Unknown key")}</code>
+      <div class="key-history-meta"><span>Issued ${item.issuedAt ? new Date(Number(item.issuedAt) * 1000).toLocaleString() : "—"}</span><span>${item.expiresAt == null ? "No expiry" : `Expires ${new Date(Number(item.expiresAt) * 1000).toLocaleString()}`}</span></div>
+      <div class="key-history-actions">${action}</div>
+    </article>`;
+  }).join("");
+  $$(".key-history-copy").forEach(button => button.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(decodeURIComponent(button.dataset.key));
+      button.textContent = "Copied";
+      setTimeout(() => { button.textContent = "Copy Key"; }, 1200);
+    } catch { setMessage("Clipboard permission was blocked."); }
+  }));
+}
+
+async function loadMyKeys() {
+  try {
+    const query = new URLSearchParams({ clientToken: state.clientToken });
+    const data = await api(`/api/key/history?${query}`);
+    state.historyKeys = data.keys || [];
+    renderMyKeys();
+  } catch {
+    renderMyKeys();
+  }
+}
+
+async function recoverKey() {
+  const input = $("#recoverKeyInput");
+  const key = input.value.trim();
+  if (!key) { setMessage("Enter your old key first."); return; }
+  try {
+    const data = await api("/api/key/lookup", { method: "POST", body: { key } });
+    saveIssuedKey(data.key);
+    setMessage("Key recovered. It is now saved in My Keys.", true);
+    location.hash = "my-keys";
+    input.value = "";
+  } catch (error) { setMessage(error.message); }
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>\"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'\"':"&quot;", "'":"&#39;"}[char]));
+}
 
 function getClientToken() {
   let token = localStorage.getItem("airesz_client_token");
@@ -182,7 +306,13 @@ async function startRoute() {
     renderSteps();
     setMessage(data.resumed ? "Your previous active route has been resumed." : "Route started. Press Open on the first checkpoint.", true);
   } catch (error) {
-    setMessage(error.message);
+    if (error?.data?.code === "ACTIVE_KEY_EXISTS") {
+      setMessage("You already have an active key. Wait until it expires before generating another.");
+      await loadMyKeys();
+      location.hash = "my-keys";
+    } else {
+      setMessage(error.message);
+    }
   } finally {
     state.busy = false;
     updateControls();
@@ -281,6 +411,8 @@ async function issueKey() {
   });
   $("#keyOutput").textContent = data.key;
   $("#expiryText").textContent = `Expires ${new Date(data.expiresAt * 1000).toLocaleString()}`;
+  saveIssuedKey(data);
+  await loadMyKeys();
   $("#keyBox").classList.remove("hidden");
   $("#routeState").textContent = "Unlocked";
   $("#startBtn").innerHTML = '<span>＋</span> Start Another Route';
@@ -345,6 +477,9 @@ $("#copyBtn").addEventListener("click", async () => {
 
 $("#supportLink").href = config.supportUrl;
 $("#manualSupportLink").href = config.supportUrl;
+$("#recoverKeyBtn")?.addEventListener("click", recoverKey);
+$("#refreshMyKeysBtn")?.addEventListener("click", loadMyKeys);
+setInterval(renderMyKeys, 30000);
 
 (async function init() {
   const params = new URLSearchParams(location.search);
@@ -353,6 +488,7 @@ $("#manualSupportLink").href = config.supportUrl;
   updateSelection();
   try {
     await loadProviders();
+    await loadMyKeys();
     if (!state.session) await discoverActiveSession();
     if (state.session) {
       $("#routeState").textContent = "Resuming";
