@@ -363,9 +363,8 @@ async function startRoute() {
     renderSteps();
     setMessage(data.resumed ? "Your previous active route has been resumed." : "Route started. Press Open on the first checkpoint.", true);
   } catch (error) {
-    if (error?.data?.code === "KEY_GENERATE_COOLDOWN") {
-      const retryAfter = Number(error?.data?.retryAfter || 30);
-      setMessage(`Please wait ${Math.max(1, Math.ceil(retryAfter))}s before generating another key.`);
+    if (error?.data?.code === "KEY_GENERATE_RATE_LIMITED" || error?.data?.code === "RATE_LIMITED") {
+      setMessage("Too many key generation requests. Please try again later.");
     } else {
       setMessage(error.message);
     }
