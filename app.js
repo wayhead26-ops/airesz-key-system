@@ -363,10 +363,9 @@ async function startRoute() {
     renderSteps();
     setMessage(data.resumed ? "Your previous active route has been resumed." : "Route started. Press Open on the first checkpoint.", true);
   } catch (error) {
-    if (error?.data?.code === "ACTIVE_KEY_EXISTS") {
-      setMessage("You already have an active key. Wait until it expires before generating another.");
-      await loadMyKeys();
-      location.hash = "my-keys";
+    if (error?.data?.code === "KEY_GENERATE_COOLDOWN") {
+      const retryAfter = Number(error?.data?.retryAfter || 30);
+      setMessage(`Please wait ${Math.max(1, Math.ceil(retryAfter))}s before generating another key.`);
     } else {
       setMessage(error.message);
     }
