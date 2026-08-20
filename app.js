@@ -71,10 +71,39 @@ function maskKey(key) {
   return `${text.slice(0, 12)}…${text.slice(-4)}`;
 }
 
+function renderKeyHistoryCard(item) {
+  const [label, cls] = keyStateLabel(item);
+  const keyText = item.key || maskKey(item.prefix);
+  const canCopy = Boolean(item.key);
+  const action = item.state === "hwid_mismatch"
+    ? '<span class="key-history-note">Get a new key to continue.</span>'
+    : canCopy
+      ? `<button class="key-history-copy" data-key="${encodeURIComponent(item.key)}">Copy Key</button>`
+      : '<span class="key-history-note">Enter the key below to recover.</span>';
+
+  return `<article class="key-history-card ${cls}">
+    <div class="key-history-top"><div><span class="key-state-pill ${cls}">${label}</span><strong>${item.plan ? `${item.plan} Key` : "Airesz Key"}</strong></div><span class="key-history-time">${item.expiresAt == null ? "Lifetime" : remainingText(item.expiresAt)}</span></div>
+    <code>${canCopy ? escapeHtml(item.key) : escapeHtml(keyText || "Unknown key")}</code>
+    <div class="key-history-meta"><span>Issued ${item.issuedAt ? new Date(Number(item.issuedAt) * 1000).toLocaleString() : "—"}</span><span>${item.expiresAt == null ? "No expiry" : `Expires ${new Date(Number(item.expiresAt) * 1000).toLocaleString()}`}</span></div>
+    <div class="key-history-actions">${action}</div>
+  </article>`;
+}
+
+function bindKeyCopyButtons(root = document) {
+  root.querySelectorAll(".key-history-copy").forEach(button => button.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(decodeURIComponent(button.dataset.key));
+      button.textContent = "Copied";
+      setTimeout(() => { button.textContent = "Copy Key"; }, 1200);
+    } catch {
+      setMessage("Clipboard permission was blocked.");
+    }
+  }));
+}
+
 function renderMyKeys() {
   const target = $("#myKeysList");
   if (!target) return;
-  const now = Math.floor(Date.now() / 1000);
   const merged = new Map();
   for (const item of state.historyKeys) merged.set(item.id || item.prefix, { ...item });
   for (const item of state.savedKeys) {
@@ -82,30 +111,31 @@ function renderMyKeys() {
     const current = merged.get(key) || {};
     merged.set(key, { ...current, ...item });
   }
+
   const items = [...merged.values()].sort((a, b) => Number(b.issuedAt || 0) - Number(a.issuedAt || 0));
   if (!items.length) {
     target.innerHTML = '<div class="empty-state">No saved keys yet. Generate a key and it will appear here.</div>';
     return;
   }
-  target.innerHTML = items.map(item => {
-    const [label, cls] = keyStateLabel(item);
-    const keyText = item.key || maskKey(item.prefix);
-    const canCopy = Boolean(item.key);
-    const action = item.state === "hwid_mismatch" ? '<span class="key-history-note">Get a new key to continue.</span>' : canCopy ? `<button class="key-history-copy" data-key="${encodeURIComponent(item.key)}">Copy Key</button>` : '<span class="key-history-note">Enter the key below to recover.</span>';
-    return `<article class="key-history-card ${cls}">
-      <div class="key-history-top"><div><span class="key-state-pill ${cls}">${label}</span><strong>${item.plan ? `${item.plan} Key` : "Airesz Key"}</strong></div><span class="key-history-time">${item.expiresAt == null ? "Lifetime" : remainingText(item.expiresAt)}</span></div>
-      <code>${canCopy ? escapeHtml(item.key) : escapeHtml(item.prefix || "Unknown key")}</code>
-      <div class="key-history-meta"><span>Issued ${item.issuedAt ? new Date(Number(item.issuedAt) * 1000).toLocaleString() : "—"}</span><span>${item.expiresAt == null ? "No expiry" : `Expires ${new Date(Number(item.expiresAt) * 1000).toLocaleString()}`}</span></div>
-      <div class="key-history-actions">${action}</div>
-    </article>`;
-  }).join("");
-  $$(".key-history-copy").forEach(button => button.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(decodeURIComponent(button.dataset.key));
-      button.textContent = "Copied";
-      setTimeout(() => { button.textContent = "Copy Key"; }, 1200);
-    } catch { setMessage("Clipboard permission was blocked."); }
-  }));
+
+  const activeItems = [];
+  const expiredItems = [];
+  for (const item of items) {
+    const [, cls] = keyStateLabel(item);
+    if (cls === "expired" || cls === "revoked" || cls === "paused") expiredItems.push(item);
+    else activeItems.push(item);
+  }
+
+  const activeHtml = activeItems.map(renderKeyHistoryCard).join("");
+  const expiredHtml = expiredItems.length
+    ? `<details class="expired-history">
+        <summary><span>Expired History</span><span class="expired-history-count">${expiredItems.length}</span></summary>
+        <div class="expired-history-list">${expiredItems.map(renderKeyHistoryCard).join("")}</div>
+      </details>`
+    : "";
+
+  target.innerHTML = `${activeHtml}${expiredHtml}`;
+  bindKeyCopyButtons(target);
 }
 
 async function loadMyKeys() {
@@ -121,15 +151,42 @@ async function loadMyKeys() {
 
 async function recoverKey() {
   const input = $("#recoverKeyInput");
+  const result = $("#recoverKeyResult");
   const key = input.value.trim();
   if (!key) { setMessage("Enter your old key first."); return; }
+
   try {
     const data = await api("/api/key/lookup", { method: "POST", body: { key } });
     saveIssuedKey(data.key);
-    setMessage("Key recovered. It is now saved in My Keys.", true);
-    location.hash = "my-keys";
+
+    const [label, cls] = keyStateLabel(data.key);
+    const remaining = data.key.expiresAt == null ? "Lifetime" : remainingText(data.key.expiresAt);
+    const expiry = data.key.expiresAt == null
+      ? "No expiry"
+      : `Expires ${new Date(Number(data.key.expiresAt) * 1000).toLocaleString()}`;
+
+    result.hidden = false;
+    result.innerHTML = `
+      <div class="recover-result-head">
+        <span class="key-state-pill ${cls}">${escapeHtml(label)}</span>
+        <strong>Key Recovered</strong>
+      </div>
+      <code>${escapeHtml(data.key.key)}</code>
+      <div class="recover-result-meta">
+        <span>${escapeHtml(data.key.plan || "Airesz Key")} · ${escapeHtml(remaining)}</span>
+        <span>${escapeHtml(expiry)}</span>
+      </div>
+      <button class="key-history-copy recover-copy-button" type="button" data-key="${encodeURIComponent(data.key.key)}">Copy Key</button>
+    `;
+
+    bindKeyCopyButtons(result);
+    setMessage("Key recovered successfully.", true);
     input.value = "";
-  } catch (error) { setMessage(error.message); }
+  } catch (error) {
+    result.hidden = true;
+    result.innerHTML = "";
+    setMessage(error.message);
+  }
 }
 
 function escapeHtml(value) {

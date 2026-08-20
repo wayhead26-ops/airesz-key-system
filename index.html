@@ -124,10 +124,14 @@
       <div class="section-label">MY KEYS</div>
       <div class="my-keys-heading"><div><h2>Your Key History</h2><p>Keys stay recorded on the server. Close the browser and come back later to see their status again.</p></div><button id="refreshMyKeysBtn" class="secondary-button refresh-my-keys" type="button">↻ Refresh</button></div>
       <div id="myKeysList" class="my-keys-list"><div class="empty-state">Loading key history...</div></div>
-      <div class="recover-key-card">
-        <div><strong>Recover an older key</strong><p>After a phone/browser reset, enter the key you already have. We will restore it to this device and show its current status.</p></div>
-        <div class="recover-row"><input id="recoverKeyInput" type="text" autocomplete="off" spellcheck="false" placeholder="AIRESZ-72H-XXXX-XXXX"><button id="recoverKeyBtn" class="primary-button" type="button">Recover Key</button></div>
-      </div>
+      <details class="recover-key-card">
+        <summary><span>Recover an older key</span><span class="recover-chevron">▸</span></summary>
+        <div class="recover-key-body">
+          <p>After a phone/browser reset, enter a key you already generated. We will restore it to this device and show its current status.</p>
+          <div class="recover-row"><input id="recoverKeyInput" type="text" autocomplete="off" spellcheck="false" placeholder="AIRESZ-72H-XXXX-XXXX"><button id="recoverKeyBtn" class="primary-button" type="button">Recover Key</button></div>
+          <div id="recoverKeyResult" class="recover-key-result" hidden></div>
+        </div>
+      </details>
     </section>
 
     <section id="how-it-works" class="how shell">
