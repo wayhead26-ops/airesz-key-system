@@ -534,7 +534,64 @@ $("#supportLink").href = config.supportUrl;
 $("#manualSupportLink").href = config.supportUrl;
 $("#recoverKeyBtn")?.addEventListener("click", recoverKey);
 $("#refreshMyKeysBtn")?.addEventListener("click", loadMyKeys);
-setInterval(renderMyKeys, 30000);
+async function startLifetimeCheckout() {
+  const button = $("#buyLifetimeBtn");
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Opening Checkout…";
+  }
+  setMessage("Opening secure Stripe Checkout…", true);
+  try {
+    const data = await api("/api/stripe/checkout", {
+      method: "POST",
+      body: { clientToken: state.clientToken }
+    });
+    if (!data.url) throw new Error("Stripe checkout URL was not returned.");
+    location.href = data.url;
+  } catch (error) {
+    setMessage(error.message);
+    if (button) {
+      button.disabled = false;
+      button.textContent = "💎 Buy Lifetime · $5";
+    }
+  }
+}
+
+async function handleStripeReturn() {
+  const params = new URLSearchParams(location.search);
+  const success = params.get("stripe_success");
+  const cancel = params.get("stripe_cancel");
+  const sessionId = params.get("session_id");
+
+  if (cancel === "1") {
+    setMessage("Payment cancelled. No Lifetime key was created.");
+    history.replaceState({}, "", location.pathname + location.hash);
+    return;
+  }
+
+  if (success !== "1" || !sessionId) return;
+
+  setMessage("Payment confirmed by Stripe. Preparing your Lifetime key…", true);
+  try {
+    const data = await api("/api/stripe/claim", {
+      method: "POST",
+      body: { clientToken: state.clientToken, sessionId }
+    });
+    if (!data.key) throw new Error("Lifetime key was not returned.");
+    saveIssuedKey(data);
+    $("#keyOutput").textContent = data.key;
+    $("#expiryText").textContent = "Never expires";
+    $("#keyBox").classList.remove("hidden");
+    $("#routeState").textContent = "Lifetime Unlocked";
+    await loadMyKeys();
+    setMessage("🎉 Lifetime purchase complete. Your permanent key is ready.", true);
+    location.hash = "my-keys";
+  } catch (error) {
+    setMessage(error.message || "We could not claim your Lifetime key yet.");
+  } finally {
+    history.replaceState({}, "", location.pathname + location.hash);
+  }
+}
 
 (async function init() {
   const params = new URLSearchParams(location.search);
@@ -542,8 +599,12 @@ setInterval(renderMyKeys, 30000);
   selectUi();
   updateSelection();
   try {
+    if (location.hash === "#buy-lifetime") {
+      setTimeout(() => $("#buyLifetimeBtn")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
+    }
     await loadProviders();
     await loadMyKeys();
+    await handleStripeReturn();
     if (!state.session) await discoverActiveSession();
     if (state.session) {
       $("#routeState").textContent = "Resuming";
