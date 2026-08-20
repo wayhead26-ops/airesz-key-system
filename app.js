@@ -534,6 +534,7 @@ $("#supportLink").href = config.supportUrl;
 $("#manualSupportLink").href = config.supportUrl;
 $("#recoverKeyBtn")?.addEventListener("click", recoverKey);
 $("#refreshMyKeysBtn")?.addEventListener("click", loadMyKeys);
+$("#buyLifetimeBtn")?.addEventListener("click", startLifetimeCheckout);
 async function startLifetimeCheckout() {
   const button = $("#buyLifetimeBtn");
   if (button) {
