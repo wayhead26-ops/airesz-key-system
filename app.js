@@ -695,6 +695,8 @@ async function startLifetimeCheckout() {
   }
 }
 
+$("#buyLifetimeBtn")?.addEventListener("click", startLifetimeCheckout);
+
 async function handleStripeReturn() {
   const params = new URLSearchParams(location.search);
   const success = params.get("stripe_success");
