@@ -46,6 +46,7 @@ function saveIssuedKey(keyData) {
 function keyStateLabel(item) {
   const now = Math.floor(Date.now() / 1000);
   if (item.state === "hwid_mismatch") return ["HWID Mismatch", "hwid-mismatch"];
+  if (item.state === "deleted") return ["Deleted", "revoked"];
   if (item.state === "revoked") return ["Revoked", "revoked"];
   if (item.state === "paused") return ["Paused", "paused"];
   if (item.state === "expired") return ["Expired", "expired"];
@@ -75,7 +76,9 @@ function renderKeyHistoryCard(item) {
   const [label, cls] = keyStateLabel(item);
   const keyText = item.key || maskKey(item.prefix);
   const canCopy = Boolean(item.key);
-  const action = item.state === "hwid_mismatch"
+  const action = item.state === "deleted"
+    ? '<span class="key-history-note">This key was deleted and is no longer active.</span>'
+    : item.state === "hwid_mismatch"
     ? '<span class="key-history-note">Get a new key to continue.</span>'
     : canCopy
       ? `<button class="key-history-copy" data-key="${encodeURIComponent(item.key)}">Copy Key</button>`
@@ -109,7 +112,9 @@ function renderMyKeys() {
   for (const item of state.savedKeys) {
     const key = item.id || item.key;
     const current = merged.get(key) || {};
-    merged.set(key, { ...current, ...item });
+    const mergedItem = { ...current, ...item };
+    if (current.state === "deleted") mergedItem.state = "deleted";
+    merged.set(key, mergedItem);
   }
 
   const items = [...merged.values()].sort((a, b) => Number(b.issuedAt || 0) - Number(a.issuedAt || 0));
@@ -534,7 +539,6 @@ $("#supportLink").href = config.supportUrl;
 $("#manualSupportLink").href = config.supportUrl;
 $("#recoverKeyBtn")?.addEventListener("click", recoverKey);
 $("#refreshMyKeysBtn")?.addEventListener("click", loadMyKeys);
-$("#buyLifetimeBtn")?.addEventListener("click", startLifetimeCheckout);
 async function startLifetimeCheckout() {
   const button = $("#buyLifetimeBtn");
   if (button) {
@@ -543,9 +547,14 @@ async function startLifetimeCheckout() {
   }
   setMessage("Opening secure Stripe Checkout…", true);
   try {
+    const params = new URLSearchParams(location.search);
+    const discordLinkToken = params.get("discord_link") || "";
     const data = await api("/api/stripe/checkout", {
       method: "POST",
-      body: { clientToken: state.clientToken }
+      body: {
+        clientToken: state.clientToken,
+        ...(discordLinkToken ? { discordLinkToken } : {})
+      }
     });
     if (!data.url) throw new Error("Stripe checkout URL was not returned.");
     location.href = data.url;
