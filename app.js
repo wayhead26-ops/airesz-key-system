@@ -8,7 +8,10 @@ const state = {
   clientToken: getClientToken(),
   busy: false,
   savedKeys: loadSavedKeys(),
-  historyKeys: []
+  historyKeys: [],
+  historyTab: "active",
+  discordToken: localStorage.getItem("airesz_discord_session") || "",
+  discordUser: null
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -84,8 +87,9 @@ function renderKeyHistoryCard(item) {
       ? `<button class="key-history-copy" data-key="${encodeURIComponent(item.key)}">Copy Key</button>`
       : '<span class="key-history-note">Enter the key below to recover.</span>';
 
-  return `<article class="key-history-card ${cls}">
-    <div class="key-history-top"><div><span class="key-state-pill ${cls}">${label}</span><strong>${item.plan ? `${item.plan} Key` : "Airesz Key"}</strong></div><span class="key-history-time">${item.expiresAt == null ? "Lifetime" : remainingText(item.expiresAt)}</span></div>
+  const keyTitle = item.source === "giveaway" ? "Giveaway Key" : item.plan ? `${item.plan} Key` : "Airesz Key";
+  return `<article class="key-history-card ${cls} ${item.source === "giveaway" ? "giveaway" : ""}">
+    <div class="key-history-top"><div><span class="key-state-pill ${cls}">${label}</span><strong>${keyTitle}</strong></div><span class="key-history-time">${item.expiresAt == null ? "Lifetime" : remainingText(item.expiresAt)}</span></div>
     <code>${canCopy ? escapeHtml(item.key) : escapeHtml(keyText || "Unknown key")}</code>
     <div class="key-history-meta"><span>Issued ${item.issuedAt ? new Date(Number(item.issuedAt) * 1000).toLocaleString() : "—"}</span><span>${item.expiresAt == null ? "No expiry" : `Expires ${new Date(Number(item.expiresAt) * 1000).toLocaleString()}`}</span></div>
     <div class="key-history-actions">${action}</div>
@@ -119,27 +123,38 @@ function renderMyKeys() {
 
   const items = [...merged.values()].sort((a, b) => Number(b.issuedAt || 0) - Number(a.issuedAt || 0));
   if (!items.length) {
-    target.innerHTML = '<div class="empty-state">No saved keys yet. Generate a key and it will appear here.</div>';
+    $("#activeKeyCount").textContent = "0";
+    $("#expiredKeyCount").textContent = "0";
+    $("#deletedKeyCount").textContent = "0";
+    target.innerHTML = '<div class="empty-state">No active keys yet. Generate a free key or buy Lifetime access.</div>';
     return;
   }
 
-  const activeItems = [];
-  const expiredItems = [];
+  const groups = { active: [], expired: [], deleted: [] };
   for (const item of items) {
     const [, cls] = keyStateLabel(item);
-    if (cls === "expired" || cls === "revoked" || cls === "paused") expiredItems.push(item);
-    else activeItems.push(item);
+    if (item.state === "deleted") groups.deleted.push(item);
+    else if (cls === "expired" || cls === "revoked" || cls === "paused") groups.expired.push(item);
+    else groups.active.push(item);
   }
-
-  const activeHtml = activeItems.map(renderKeyHistoryCard).join("");
-  const expiredHtml = expiredItems.length
-    ? `<details class="expired-history">
-        <summary><span>Expired History</span><span class="expired-history-count">${expiredItems.length}</span></summary>
-        <div class="expired-history-list">${expiredItems.map(renderKeyHistoryCard).join("")}</div>
-      </details>`
-    : "";
-
-  target.innerHTML = `${activeHtml}${expiredHtml}`;
+  const counts = { active: groups.active.length, expired: groups.expired.length, deleted: groups.deleted.length };
+  $("#activeKeyCount").textContent = counts.active;
+  $("#expiredKeyCount").textContent = counts.expired;
+  $("#deletedKeyCount").textContent = counts.deleted;
+  $$(".key-history-tab").forEach((button) => {
+    const selected = button.dataset.historyTab === state.historyTab;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-selected", String(selected));
+  });
+  const selectedItems = groups[state.historyTab] || groups.active;
+  const emptyLabel = state.historyTab === "deleted"
+    ? "No deleted keys in your history."
+    : state.historyTab === "expired"
+      ? "No expired keys in your history."
+      : "No active keys yet. Generate a free key or buy Lifetime access.";
+  target.innerHTML = selectedItems.length
+    ? selectedItems.map(renderKeyHistoryCard).join("")
+    : `<div class="empty-state">${emptyLabel}</div>`;
   bindKeyCopyButtons(target);
 }
 
@@ -209,9 +224,12 @@ function getClientToken() {
 }
 
 async function api(path, options = {}) {
+  const headers = {};
+  if (options.body) headers["content-type"] = "application/json";
+  if (state.discordToken) headers.authorization = `Bearer ${state.discordToken}`;
   const response = await fetch(`${config.workerUrl.replace(/\/$/, "")}${path}`, {
     method: options.method || "GET",
-    headers: options.body ? { "content-type": "application/json" } : undefined,
+    headers,
     body: options.body ? JSON.stringify(options.body) : undefined
   });
   const data = await response.json().catch(() => ({}));
@@ -222,6 +240,102 @@ async function api(path, options = {}) {
     throw error;
   }
   return data;
+}
+
+function renderDiscordIdentity() {
+  const loggedIn = Boolean(state.discordUser);
+  $("#identityGuest")?.classList.toggle("hidden", loggedIn);
+  $("#identityUser")?.classList.toggle("hidden", !loggedIn);
+  const topButton = $("#topLoginBtn");
+  if (topButton) topButton.textContent = loggedIn ? state.discordUser.username : "Login with Discord";
+  if (loggedIn) {
+    $("#discordUsername").textContent = state.discordUser.username;
+    const avatar = $("#discordAvatar");
+    avatar.src = state.discordUser.avatarUrl || "assets/airesz-mark.png";
+    $("#identityDescription").textContent = "Your Discord-linked keys are synced across devices. Guest checkpoint access remains available.";
+    $("#keyHistoryDescription").textContent = "Showing browser keys and every key linked to your Discord account.";
+  } else {
+    $("#identityDescription").textContent = "Guest keys stay in this browser. Discord Login keeps linked key history available across your devices.";
+    $("#keyHistoryDescription").textContent = "Guest history belongs to this browser. Login with Discord to access linked keys across devices.";
+  }
+}
+
+function loginWithDiscord() {
+  const returnUrl = new URL(location.href);
+  returnUrl.searchParams.delete("discord_login");
+  returnUrl.searchParams.delete("discord_error");
+  const start = new URL(`${config.workerUrl.replace(/\/$/, "")}/api/auth/discord/start`);
+  start.searchParams.set("return_to", returnUrl.toString());
+  location.href = start.toString();
+}
+
+async function handleDiscordLoginReturn() {
+  const params = new URLSearchParams(location.search);
+  const code = params.get("discord_login");
+  const loginError = params.get("discord_error");
+  if (loginError) setMessage(loginError);
+  if (!code) return;
+  const data = await api("/api/auth/discord/exchange", { method: "POST", body: { code } });
+  state.discordToken = data.token;
+  state.discordUser = data.user;
+  localStorage.setItem("airesz_discord_session", data.token);
+  params.delete("discord_login");
+  params.delete("discord_error");
+  const clean = `${location.pathname}${params.toString() ? `?${params}` : ""}${location.hash}`;
+  history.replaceState({}, "", clean);
+  renderDiscordIdentity();
+  setMessage(`Welcome, ${data.user.username}. Your Discord key history is connected.`, true);
+}
+
+async function restoreDiscordLogin() {
+  if (!state.discordToken) { renderDiscordIdentity(); return; }
+  try {
+    const data = await api("/api/auth/discord/me");
+    state.discordUser = data.user;
+  } catch {
+    state.discordToken = "";
+    state.discordUser = null;
+    localStorage.removeItem("airesz_discord_session");
+  }
+  renderDiscordIdentity();
+}
+
+async function logoutDiscord() {
+  try { await api("/api/auth/discord/logout", { method: "POST", body: {} }); } catch {}
+  state.discordToken = "";
+  state.discordUser = null;
+  state.historyKeys = [];
+  localStorage.removeItem("airesz_discord_session");
+  renderDiscordIdentity();
+  await loadMyKeys();
+  setMessage("Logged out. Guest mode is active.", true);
+}
+
+async function logoutAllDiscordDevices() {
+  if (!confirm("Logout this Discord account from every Airesz Key System browser?")) return;
+  try {
+    await api("/api/auth/discord/logout-all", { method: "POST", body: {} });
+    state.discordToken = "";
+    state.discordUser = null;
+    state.historyKeys = [];
+    localStorage.removeItem("airesz_discord_session");
+    renderDiscordIdentity();
+    await loadMyKeys();
+    setMessage("Logged out from all devices. Guest mode is active.", true);
+  } catch (error) {
+    setMessage(error.message || "Could not logout all devices.");
+  }
+}
+
+async function linkLegacyLifetimePurchases() {
+  if (!state.discordUser || !state.clientToken) return 0;
+  const data = await api("/api/stripe/link-discord", {
+    method: "POST",
+    body: { clientToken: state.clientToken }
+  });
+  const count = Number(data.count || 0);
+  if (count > 0) setMessage(`${count} previous Lifetime purchase${count === 1 ? " was" : "s were"} linked to your Discord account.`, true);
+  return count;
 }
 
 function setMessage(text = "", ok = false) {
@@ -259,10 +373,10 @@ function updateControls() {
 function updateSelection() {
   const count = planSteps[state.plan];
   const hours = state.plan.replace("H", "");
-  $("#routeTitle").textContent = `${hours} hours · ${providerLabel()}`;
-  $("#summaryPlan").textContent = `${hours} Hours`;
-  $("#summaryProvider").textContent = providerLabel();
-  $("#summarySteps").textContent = `${count} Checkpoint${count === 1 ? "" : "s"}`;
+  if ($("#routeTitle")) $("#routeTitle").textContent = `${hours} hours · ${providerLabel()}`;
+  if ($("#summaryPlan")) $("#summaryPlan").textContent = `${hours} Hours`;
+  if ($("#summaryProvider")) $("#summaryProvider").textContent = providerLabel();
+  if ($("#summarySteps")) $("#summarySteps").textContent = `${count} Checkpoint${count === 1 ? "" : "s"}`;
   updateProgress();
 }
 
@@ -539,7 +653,23 @@ $("#supportLink").href = config.supportUrl;
 $("#manualSupportLink").href = config.supportUrl;
 $("#recoverKeyBtn")?.addEventListener("click", recoverKey);
 $("#refreshMyKeysBtn")?.addEventListener("click", loadMyKeys);
+$$(".key-history-tab").forEach((button) => button.addEventListener("click", () => {
+  state.historyTab = button.dataset.historyTab || "active";
+  renderMyKeys();
+}));
+$("#discordLoginBtn")?.addEventListener("click", loginWithDiscord);
+$("#topLoginBtn")?.addEventListener("click", () => state.discordUser ? $(".identity-gateway")?.scrollIntoView({ behavior: "smooth" }) : loginWithDiscord());
+$("#discordLogoutBtn")?.addEventListener("click", logoutDiscord);
+$("#discordLogoutAllBtn")?.addEventListener("click", logoutAllDiscordDevices);
 async function startLifetimeCheckout() {
+  const params = new URLSearchParams(location.search);
+  const discordLinkToken = params.get("discord_link") || "";
+  if (!state.discordUser && !discordLinkToken) {
+    localStorage.setItem("airesz_pending_lifetime_checkout", "1");
+    setMessage("Login with Discord before buying Lifetime. Returning you to checkout after login…", true);
+    loginWithDiscord();
+    return;
+  }
   const button = $("#buyLifetimeBtn");
   if (button) {
     button.disabled = true;
@@ -547,8 +677,6 @@ async function startLifetimeCheckout() {
   }
   setMessage("Opening secure Stripe Checkout…", true);
   try {
-    const params = new URLSearchParams(location.search);
-    const discordLinkToken = params.get("discord_link") || "";
     const data = await api("/api/stripe/checkout", {
       method: "POST",
       body: {
@@ -609,6 +737,16 @@ async function handleStripeReturn() {
   selectUi();
   updateSelection();
   try {
+    await handleDiscordLoginReturn();
+    await restoreDiscordLogin();
+    if (state.discordUser) {
+      await linkLegacyLifetimePurchases();
+      if (localStorage.getItem("airesz_pending_lifetime_checkout") === "1") {
+        localStorage.removeItem("airesz_pending_lifetime_checkout");
+        await startLifetimeCheckout();
+        return;
+      }
+    }
     if (location.hash === "#buy-lifetime") {
       setTimeout(() => $("#buyLifetimeBtn")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
     }

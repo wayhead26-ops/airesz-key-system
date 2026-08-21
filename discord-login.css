@@ -1,0 +1,19 @@
+.topbar-actions { display:flex; align-items:center; gap:9px; }
+.discord-login-mini,.discord-login-button { border:1px solid rgba(88,101,242,.55); background:linear-gradient(135deg,rgba(88,101,242,.25),rgba(111,85,255,.22)); color:#fff; border-radius:11px; padding:10px 14px; font:inherit; font-size:.7rem; font-weight:900; cursor:pointer; transition:.2s; }
+.discord-login-mini:hover,.discord-login-button:hover { border-color:#7289ff; transform:translateY(-1px); }
+.identity-gateway { display:flex; align-items:center; justify-content:space-between; gap:24px; margin-bottom:18px; padding:19px 22px; border:1px solid rgba(111,85,255,.24); border-radius:17px; background:linear-gradient(135deg,rgba(18,15,31,.95),rgba(28,25,58,.72)); box-shadow:0 18px 50px rgba(0,0,0,.25); }
+.identity-copy { display:flex; align-items:center; gap:14px; }
+.identity-icon { width:42px; height:42px; display:grid; place-items:center; flex:0 0 auto; border-radius:13px; color:#aeb8ff; background:rgba(88,101,242,.16); box-shadow:inset 0 0 0 1px rgba(120,130,255,.14); }
+.identity-copy h2 { font-size:1rem; margin:4px 0; }
+.identity-copy p { margin:0; color:var(--muted); font-size:.67rem; line-height:1.5; }
+.identity-actions,.identity-user { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+.guest-badge { font-size:.61rem; font-weight:900; color:#b8b2c5; border:1px solid rgba(255,255,255,.09); border-radius:999px; padding:8px 10px; background:rgba(255,255,255,.025); }
+.discord-login-button { background:linear-gradient(120deg,#5865f2,#784dff); padding:11px 16px; }
+.identity-user img { width:39px; height:39px; border-radius:50%; object-fit:cover; background:#171522; }
+.identity-user strong,.identity-user span { display:block; }
+.identity-user strong { font-size:.75rem; }
+.identity-user span { margin-top:3px; color:var(--green); font-size:.58rem; }
+.identity-user .secondary-button { width:auto; margin:0; padding:8px 11px; }
+.key-history-card.giveaway { box-shadow:inset 3px 0 #9b59ff; }
+@media(max-width:850px) { .discord-login-mini{display:none}.identity-gateway{align-items:flex-start;flex-direction:column}.identity-actions,.identity-user{width:100%;justify-content:space-between} }
+@media(max-width:520px) { .identity-copy{align-items:flex-start}.identity-actions{align-items:stretch;flex-direction:column}.discord-login-button{width:100%} }
