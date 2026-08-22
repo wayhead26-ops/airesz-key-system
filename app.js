@@ -703,6 +703,7 @@ $("#discordLoginBtn")?.addEventListener("click", loginWithDiscord);
 $("#topLoginBtn")?.addEventListener("click", () => state.discordUser ? $(".identity-gateway")?.scrollIntoView({ behavior: "smooth" }) : loginWithDiscord());
 $("#discordLogoutBtn")?.addEventListener("click", logoutDiscord);
 $("#discordLogoutAllBtn")?.addEventListener("click", logoutAllDiscordDevices);
+$("#buyLifetimeBtn")?.addEventListener("click", startLifetimeCheckout);
 async function startLifetimeCheckout() {
   const params = new URLSearchParams(location.search);
   const discordLinkToken = params.get("discord_link") || "";
