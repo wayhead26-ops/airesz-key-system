@@ -94,8 +94,14 @@ function renderKeyHistoryCard(item) {
     <div class="key-history-top"><div><span class="key-state-pill ${cls}">${label}</span><strong>${keyTitle}</strong></div><span class="key-history-time">${item.expiresAt == null ? "Lifetime" : remainingText(item.expiresAt)}</span></div>
     <code>${canCopy ? escapeHtml(item.key) : escapeHtml(keyText || "Unknown key")}</code>
     <div class="key-history-meta"><span>Issued ${item.issuedAt ? new Date(Number(item.issuedAt) * 1000).toLocaleString() : "—"}</span><span>${item.expiresAt == null ? "No expiry" : `Expires ${new Date(Number(item.expiresAt) * 1000).toLocaleString()}`}</span></div>
-    <div class="key-history-meta"><span>User ID: ${item.userId ? escapeHtml(String(item.userId)) : "Not linked yet"}</span>${item.source === "free" && ["24H", "48H", "72H"].includes(String(item.plan || "")) ? `<span>HWID Reset: ${Number(item.hwidResetRemaining) > 0 ? `${Number(item.hwidResetRemaining)} remaining` : "0 remaining"}</span>` : ""}</div>
-    <div class="key-history-actions">${action}${state.discordUser && item.source === "free" && ["24H", "48H", "72H"].includes(String(item.plan || "")) && item.status === "active" && Number(item.hwidResetRemaining) > 0 && item.id ? `<button class="key-history-reset-hwid" type="button" data-key-id="${escapeHtml(item.id)}">Reset HWID</button>` : ""}</div>
+    <div class="key-history-meta"><span>User ID: ${item.userId ? escapeHtml(String(item.userId)) : "Not linked yet"}</span>${item.source === "free" && ["24H", "48H", "72H"].includes(String(item.plan || "")) ? `<span>HWID Reset: ${Number(item.hwidResetRemaining) > 0 ? `${Number(item.hwidResetRemaining)} remaining` : "0 remaining"}</span>` : String(item.plan || "").toUpperCase() === "LIFETIME" ? `<span>HWID Reset: Self-service</span>` : ""}</div>
+    <div class="key-history-actions">
+      ${action}
+      ${state.discordUser && item.status === "active" && item.id && (
+        (item.source === "free" && ["24H", "48H", "72H"].includes(String(item.plan || "")) && Number(item.hwidResetRemaining) > 0) ||
+        String(item.plan || "").toUpperCase() === "LIFETIME"
+      ) ? `<button class="key-history-reset-hwid" type="button" data-key-id="${escapeHtml(item.id)}" aria-label="Reset HWID for ${escapeHtml(item.plan || "key")}">Reset HWID</button>` : ""}
+    </div>
   </article>`;
 }
 
