@@ -38,8 +38,6 @@ function saveIssuedKey(keyData) {
     prefix: keyData.prefix || keyData.key.slice(0, 20),
     plan: keyData.plan || "",
     provider: keyData.provider || "",
-    userId: keyData.userId || null,
-    hwidResetRemaining: keyData.hwidResetRemaining == null ? null : Number(keyData.hwidResetRemaining),
     issuedAt: Number(keyData.issuedAt || Math.floor(Date.now() / 1000)),
     expiresAt: keyData.expiresAt == null ? null : Number(keyData.expiresAt)
   };
@@ -81,27 +79,26 @@ function renderKeyHistoryCard(item) {
   const [label, cls] = keyStateLabel(item);
   const keyText = item.key || maskKey(item.prefix);
   const canCopy = Boolean(item.key);
+  const plan = String(item.plan || "").toUpperCase();
+  const source = String(item.source || "").toLowerCase();
+  const freeEligible = source === "free" && ["24H", "48H", "72H"].includes(plan) && Number(item.hwidResetRemaining) > 0;
+  const lifetimeEligible = plan === "LIFETIME" && item.state === "active";
+  const canReset = item.state !== "deleted" && item.state !== "hwid_mismatch" && item.status === "active" && item.id && (freeEligible || lifetimeEligible);
+  const userId = item.userId ? escapeHtml(item.userId) : "Not linked yet";
+  const resetMeta = (freeEligible || lifetimeEligible) ? `<span>HWID Reset: ${item.hwidResetRemaining == null ? "Available" : `${Number(item.hwidResetRemaining)} remaining`}</span>` : "";
   const action = item.state === "deleted"
     ? '<span class="key-history-note">This key was deleted and is no longer active.</span>'
     : item.state === "hwid_mismatch"
     ? '<span class="key-history-note">Get a new key to continue.</span>'
     : canCopy
-      ? `<button class="key-history-copy" data-key="${encodeURIComponent(item.key)}">Copy Key</button>`
+      ? `<button class="key-history-copy" type="button" data-key="${encodeURIComponent(item.key)}">Copy Key</button>${canReset ? `<button class="key-history-reset-hwid" type="button" data-key-id="${escapeHtml(item.id)}">Reset HWID</button>` : ""}`
       : '<span class="key-history-note">Enter the key below to recover.</span>';
-
   const keyTitle = item.source === "giveaway" ? "Giveaway Key" : item.plan ? `${item.plan} Key` : "Airesz Key";
   return `<article class="key-history-card ${cls} ${item.source === "giveaway" ? "giveaway" : ""}">
     <div class="key-history-top"><div><span class="key-state-pill ${cls}">${label}</span><strong>${keyTitle}</strong></div><span class="key-history-time">${item.expiresAt == null ? "Lifetime" : remainingText(item.expiresAt)}</span></div>
     <code>${canCopy ? escapeHtml(item.key) : escapeHtml(keyText || "Unknown key")}</code>
-    <div class="key-history-meta"><span>Issued ${item.issuedAt ? new Date(Number(item.issuedAt) * 1000).toLocaleString() : "—"}</span><span>${item.expiresAt == null ? "No expiry" : `Expires ${new Date(Number(item.expiresAt) * 1000).toLocaleString()}`}</span></div>
-    <div class="key-history-meta"><span>User ID: ${item.userId ? escapeHtml(String(item.userId)) : "Not linked yet"}</span>${item.source === "free" && ["24H", "48H", "72H"].includes(String(item.plan || "")) ? `<span>HWID Reset: ${Number(item.hwidResetRemaining) > 0 ? `${Number(item.hwidResetRemaining)} remaining` : "0 remaining"}</span>` : String(item.plan || "").toUpperCase() === "LIFETIME" ? `<span>HWID Reset: Self-service</span>` : ""}</div>
-    <div class="key-history-actions">
-      ${action}
-      ${item.status === "active" && item.id && (
-        (item.source === "free" && ["24H", "48H", "72H"].includes(String(item.plan || "")) && Number(item.hwidResetRemaining) > 0) ||
-        String(item.plan || "").toUpperCase() === "LIFETIME"
-      ) ? `<button class="key-history-reset-hwid" type="button" data-key-id="${escapeHtml(item.id)}" aria-label="Reset HWID for ${escapeHtml(item.plan || "key")}">Reset HWID</button>` : ""}
-    </div>
+    <div class="key-history-meta"><span>Roblox User ID: ${userId}</span><span>Issued ${item.issuedAt ? new Date(Number(item.issuedAt) * 1000).toLocaleString() : "—"}</span><span>${item.expiresAt == null ? "No expiry" : `Expires ${new Date(Number(item.expiresAt) * 1000).toLocaleString()}`}</span>${resetMeta}</div>
+    <div class="key-history-actions">${action}</div>
   </article>`;
 }
 
@@ -117,34 +114,25 @@ function bindKeyCopyButtons(root = document) {
   }));
 }
 
-function bindHwidResetButtons(root = document) {
+function bindKeyResetButtons(root = document) {
   root.querySelectorAll(".key-history-reset-hwid").forEach(button => button.addEventListener("click", async () => {
-    const keyId = button.dataset.keyId;
-    if (!keyId || state.busy) return;
-
+    const keyId = String(button.dataset.keyId || "").trim();
+    if (!keyId) return;
     if (!state.discordUser) {
-      setMessage("Login with Discord first. Your key must be linked to your Discord account before an HWID reset can be performed.");
+      localStorage.setItem("airesz_pending_hwid_reset", keyId);
+      setMessage("Login with Discord before resetting your HWID.", true);
       loginWithDiscord();
       return;
     }
-
-    if (!window.confirm("Reset this key's HWID binding? Your available self-service reset will be consumed and the key will need to verify again on the next device.")) return;
-
-    button.disabled = true;
-    const original = button.textContent;
-    button.textContent = "Resetting…";
+    if (!confirm("Reset the HWID for this key? Your current device binding will be cleared.")) return;
+    button.disabled = true; button.textContent = "Resetting…";
     try {
-      const data = await api("/api/client/discord/resethwid", {
-        method: "POST",
-        body: { keyId }
-      });
-      const remaining = data.resetsRemaining == null ? "Unlimited" : String(data.resetsRemaining);
-      setMessage(`HWID reset successful. ${remaining === "Unlimited" ? "Unlimited" : `${remaining} reset remaining`}.`, true);
+      const data = await api("/api/client/discord/resethwid", { method: "POST", body: { keyId } });
+      setMessage(`HWID reset successful. ${data.resetsRemaining == null ? "Reset completed." : `Resets remaining: ${data.resetsRemaining}`}`, true);
       await loadMyKeys();
     } catch (error) {
       setMessage(error.message || "HWID reset failed.");
-      button.disabled = false;
-      button.textContent = original;
+      button.disabled = false; button.textContent = "Reset HWID";
     }
   }));
 }
@@ -197,7 +185,7 @@ function renderMyKeys() {
     ? selectedItems.map(renderKeyHistoryCard).join("")
     : `<div class="empty-state">${emptyLabel}</div>`;
   bindKeyCopyButtons(target);
-  bindHwidResetButtons(target);
+  bindKeyResetButtons(target);
 }
 
 async function loadMyKeys() {
@@ -788,6 +776,11 @@ async function handleStripeReturn() {
         localStorage.removeItem("airesz_pending_lifetime_checkout");
         await startLifetimeCheckout();
         return;
+      }
+      if (localStorage.getItem("airesz_pending_hwid_reset")) {
+        localStorage.removeItem("airesz_pending_hwid_reset");
+        await loadMyKeys();
+        setTimeout(() => document.querySelector("#my-keys")?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
       }
     }
     if (location.hash === "#buy-lifetime") {
