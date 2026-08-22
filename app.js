@@ -38,6 +38,8 @@ function saveIssuedKey(keyData) {
     prefix: keyData.prefix || keyData.key.slice(0, 20),
     plan: keyData.plan || "",
     provider: keyData.provider || "",
+    userId: keyData.userId || null,
+    hwidResetRemaining: keyData.hwidResetRemaining == null ? null : Number(keyData.hwidResetRemaining),
     issuedAt: Number(keyData.issuedAt || Math.floor(Date.now() / 1000)),
     expiresAt: keyData.expiresAt == null ? null : Number(keyData.expiresAt)
   };
@@ -92,6 +94,7 @@ function renderKeyHistoryCard(item) {
     <div class="key-history-top"><div><span class="key-state-pill ${cls}">${label}</span><strong>${keyTitle}</strong></div><span class="key-history-time">${item.expiresAt == null ? "Lifetime" : remainingText(item.expiresAt)}</span></div>
     <code>${canCopy ? escapeHtml(item.key) : escapeHtml(keyText || "Unknown key")}</code>
     <div class="key-history-meta"><span>Issued ${item.issuedAt ? new Date(Number(item.issuedAt) * 1000).toLocaleString() : "—"}</span><span>${item.expiresAt == null ? "No expiry" : `Expires ${new Date(Number(item.expiresAt) * 1000).toLocaleString()}`}</span></div>
+    <div class="key-history-meta"><span>User ID: ${item.userId ? escapeHtml(String(item.userId)) : "Not linked yet"}</span>${item.source === "free" && ["24H", "48H", "72H"].includes(String(item.plan || "")) ? `<span>HWID Reset: ${Number(item.hwidResetRemaining) > 0 ? `${Number(item.hwidResetRemaining)} remaining` : "0 remaining"}</span>` : ""}</div>
     <div class="key-history-actions">${action}</div>
   </article>`;
 }
@@ -694,8 +697,6 @@ async function startLifetimeCheckout() {
     }
   }
 }
-
-$("#buyLifetimeBtn")?.addEventListener("click", startLifetimeCheckout);
 
 async function handleStripeReturn() {
   const params = new URLSearchParams(location.search);
