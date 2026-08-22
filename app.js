@@ -95,7 +95,7 @@ function renderKeyHistoryCard(item) {
     <code>${canCopy ? escapeHtml(item.key) : escapeHtml(keyText || "Unknown key")}</code>
     <div class="key-history-meta"><span>Issued ${item.issuedAt ? new Date(Number(item.issuedAt) * 1000).toLocaleString() : "—"}</span><span>${item.expiresAt == null ? "No expiry" : `Expires ${new Date(Number(item.expiresAt) * 1000).toLocaleString()}`}</span></div>
     <div class="key-history-meta"><span>User ID: ${item.userId ? escapeHtml(String(item.userId)) : "Not linked yet"}</span>${item.source === "free" && ["24H", "48H", "72H"].includes(String(item.plan || "")) ? `<span>HWID Reset: ${Number(item.hwidResetRemaining) > 0 ? `${Number(item.hwidResetRemaining)} remaining` : "0 remaining"}</span>` : ""}</div>
-    <div class="key-history-actions">${action}</div>
+    <div class="key-history-actions">${action}${state.discordUser && item.source === "free" && ["24H", "48H", "72H"].includes(String(item.plan || "")) && item.status === "active" && Number(item.hwidResetRemaining) > 0 && item.id ? `<button class="key-history-reset-hwid" type="button" data-key-id="${escapeHtml(item.id)}">Reset HWID</button>` : ""}</div>
   </article>`;
 }
 
@@ -107,6 +107,30 @@ function bindKeyCopyButtons(root = document) {
       setTimeout(() => { button.textContent = "Copy Key"; }, 1200);
     } catch {
       setMessage("Clipboard permission was blocked.");
+    }
+  }));
+}
+
+function bindHwidResetButtons(root = document) {
+  root.querySelectorAll(".key-history-reset-hwid").forEach(button => button.addEventListener("click", async () => {
+    const keyId = button.dataset.keyId;
+    if (!keyId || !state.discordUser || state.busy) return;
+    if (!window.confirm("Reset this key's HWID binding? Your one free self-service reset will be consumed and the key will need to verify again on the next device.")) return;
+
+    button.disabled = true;
+    const original = button.textContent;
+    button.textContent = "Resetting…";
+    try {
+      const data = await api("/api/client/discord/resethwid", {
+        method: "POST",
+        body: { keyId }
+      });
+      setMessage(`HWID reset successful. ${Number(data.resetsRemaining || 0)} reset remaining.`, true);
+      await loadMyKeys();
+    } catch (error) {
+      setMessage(error.message || "HWID reset failed.");
+      button.disabled = false;
+      button.textContent = original;
     }
   }));
 }
@@ -159,6 +183,7 @@ function renderMyKeys() {
     ? selectedItems.map(renderKeyHistoryCard).join("")
     : `<div class="empty-state">${emptyLabel}</div>`;
   bindKeyCopyButtons(target);
+  bindHwidResetButtons(target);
 }
 
 async function loadMyKeys() {
