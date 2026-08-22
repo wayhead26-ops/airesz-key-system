@@ -77,51 +77,30 @@ function maskKey(key) {
   return `${text.slice(0, 12)}…${text.slice(-4)}`;
 }
 
-function isHwidResetEligible(item) {
-  const source = String(item?.source || "").trim().toLowerCase();
-  const plan = String(item?.plan || "").trim().toUpperCase();
-  const status = String(item?.status || "").trim().toLowerCase();
-
-  if (!item?.id) return false;
-  if (status !== "active") return false;
-  if (item?.state === "deleted" || item?.state === "expired" || item?.state === "revoked" || item?.state === "paused") return false;
-
-  if (source === "free" && ["24H", "48H", "72H"].includes(plan)) {
-    return Number(item?.hwidResetRemaining) > 0;
-  }
-
-  if (plan === "LIFETIME") {
-    return true;
-  }
-
-  return false;
-}
-
 function renderKeyHistoryCard(item) {
   const [label, cls] = keyStateLabel(item);
   const keyText = item.key || maskKey(item.prefix);
   const canCopy = Boolean(item.key);
-  const canResetHwid = Boolean(state.discordUser) && isHwidResetEligible(item);
+  const action = item.state === "deleted"
+    ? '<span class="key-history-note">This key was deleted and is no longer active.</span>'
+    : item.state === "hwid_mismatch"
+    ? '<span class="key-history-note">Get a new key to continue.</span>'
+    : canCopy
+      ? `<button class="key-history-copy" data-key="${encodeURIComponent(item.key)}">Copy Key</button>`
+      : '<span class="key-history-note">Enter the key below to recover.</span>';
 
   const keyTitle = item.source === "giveaway" ? "Giveaway Key" : item.plan ? `${item.plan} Key` : "Airesz Key";
-  const resetRemainingText = item.source === "free" && ["24H", "48H", "72H"].includes(String(item.plan || "").toUpperCase())
-    ? `<span>HWID Reset: ${Number(item.hwidResetRemaining) > 0 ? `${Number(item.hwidResetRemaining)} remaining` : "0 remaining"}</span>`
-    : String(item.plan || "").toUpperCase() === "LIFETIME"
-      ? `<span>HWID Reset: Self-service</span>`
-      : "";
-
   return `<article class="key-history-card ${cls} ${item.source === "giveaway" ? "giveaway" : ""}">
     <div class="key-history-top"><div><span class="key-state-pill ${cls}">${label}</span><strong>${keyTitle}</strong></div><span class="key-history-time">${item.expiresAt == null ? "Lifetime" : remainingText(item.expiresAt)}</span></div>
     <code>${canCopy ? escapeHtml(item.key) : escapeHtml(keyText || "Unknown key")}</code>
     <div class="key-history-meta"><span>Issued ${item.issuedAt ? new Date(Number(item.issuedAt) * 1000).toLocaleString() : "—"}</span><span>${item.expiresAt == null ? "No expiry" : `Expires ${new Date(Number(item.expiresAt) * 1000).toLocaleString()}`}</span></div>
-    <div class="key-history-meta"><span>User ID: ${item.userId ? escapeHtml(String(item.userId)) : "Discord-linked key"}</span>${resetRemainingText}</div>
+    <div class="key-history-meta"><span>User ID: ${item.userId ? escapeHtml(String(item.userId)) : "Not linked yet"}</span>${item.source === "free" && ["24H", "48H", "72H"].includes(String(item.plan || "")) ? `<span>HWID Reset: ${Number(item.hwidResetRemaining) > 0 ? `${Number(item.hwidResetRemaining)} remaining` : "0 remaining"}</span>` : String(item.plan || "").toUpperCase() === "LIFETIME" ? `<span>HWID Reset: Self-service</span>` : ""}</div>
     <div class="key-history-actions">
-      ${canCopy
-        ? `<button class="key-history-copy" type="button" data-key="${encodeURIComponent(item.key)}">Copy Key</button>`
-        : '<span class="key-history-note">Enter the key below to recover.</span>'}
-      ${canResetHwid
-        ? `<button class="key-history-reset-hwid" type="button" data-key-id="${escapeHtml(item.id)}" aria-label="Reset HWID for ${escapeHtml(item.plan || "key")}">Reset HWID</button>`
-        : ""}
+      ${action}
+      ${item.status === "active" && item.id && (
+        (item.source === "free" && ["24H", "48H", "72H"].includes(String(item.plan || "")) && Number(item.hwidResetRemaining) > 0) ||
+        String(item.plan || "").toUpperCase() === "LIFETIME"
+      ) ? `<button class="key-history-reset-hwid" type="button" data-key-id="${escapeHtml(item.id)}" aria-label="Reset HWID for ${escapeHtml(item.plan || "key")}">Reset HWID</button>` : ""}
     </div>
   </article>`;
 }
@@ -141,8 +120,15 @@ function bindKeyCopyButtons(root = document) {
 function bindHwidResetButtons(root = document) {
   root.querySelectorAll(".key-history-reset-hwid").forEach(button => button.addEventListener("click", async () => {
     const keyId = button.dataset.keyId;
-    if (!keyId || !state.discordUser || state.busy) return;
-    if (!window.confirm("Reset this key's HWID binding? Your one free self-service reset will be consumed and the key will need to verify again on the next device.")) return;
+    if (!keyId || state.busy) return;
+
+    if (!state.discordUser) {
+      setMessage("Login with Discord first. Your key must be linked to your Discord account before an HWID reset can be performed.");
+      loginWithDiscord();
+      return;
+    }
+
+    if (!window.confirm("Reset this key's HWID binding? Your available self-service reset will be consumed and the key will need to verify again on the next device.")) return;
 
     button.disabled = true;
     const original = button.textContent;
@@ -152,7 +138,8 @@ function bindHwidResetButtons(root = document) {
         method: "POST",
         body: { keyId }
       });
-      setMessage(`HWID reset successful. ${Number(data.resetsRemaining || 0)} reset remaining.`, true);
+      const remaining = data.resetsRemaining == null ? "Unlimited" : String(data.resetsRemaining);
+      setMessage(`HWID reset successful. ${remaining === "Unlimited" ? "Unlimited" : `${remaining} reset remaining`}.`, true);
       await loadMyKeys();
     } catch (error) {
       setMessage(error.message || "HWID reset failed.");
