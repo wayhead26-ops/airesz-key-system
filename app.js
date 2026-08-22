@@ -83,9 +83,10 @@ function renderKeyHistoryCard(item) {
   const source = String(item.source || "").toLowerCase();
   const freeEligible = source === "free" && ["24H", "48H", "72H"].includes(plan) && Number(item.hwidResetRemaining) > 0;
   const lifetimeEligible = plan === "LIFETIME" && item.state === "active";
-  const canReset = item.state !== "deleted" && item.state !== "hwid_mismatch" && item.status === "active" && item.id && (freeEligible || lifetimeEligible);
-  const userId = item.userId ? escapeHtml(item.userId) : "Not linked yet";
-  const resetMeta = (freeEligible || lifetimeEligible) ? `<span>HWID Reset: ${item.hwidResetRemaining == null ? "Available" : `${Number(item.hwidResetRemaining)} remaining`}</span>` : "";
+  const canReset = item.state !== "deleted" && item.state !== "hwid_mismatch" && item.status === "active" && Boolean(item.id) && (freeEligible || lifetimeEligible);
+  const resetMeta = (freeEligible || lifetimeEligible)
+    ? `<span>HWID Reset: ${item.hwidResetRemaining == null ? "Available" : `${Number(item.hwidResetRemaining)} remaining`}</span>`
+    : "";
   const action = item.state === "deleted"
     ? '<span class="key-history-note">This key was deleted and is no longer active.</span>'
     : item.state === "hwid_mismatch"
@@ -94,6 +95,7 @@ function renderKeyHistoryCard(item) {
       ? `<button class="key-history-copy" type="button" data-key="${encodeURIComponent(item.key)}">Copy Key</button>${canReset ? `<button class="key-history-reset-hwid" type="button" data-key-id="${escapeHtml(item.id)}">Reset HWID</button>` : ""}`
       : '<span class="key-history-note">Enter the key below to recover.</span>';
   const keyTitle = item.source === "giveaway" ? "Giveaway Key" : item.plan ? `${item.plan} Key` : "Airesz Key";
+  const userId = item.userId ? escapeHtml(item.userId) : "Not linked yet";
   return `<article class="key-history-card ${cls} ${item.source === "giveaway" ? "giveaway" : ""}">
     <div class="key-history-top"><div><span class="key-state-pill ${cls}">${label}</span><strong>${keyTitle}</strong></div><span class="key-history-time">${item.expiresAt == null ? "Lifetime" : remainingText(item.expiresAt)}</span></div>
     <code>${canCopy ? escapeHtml(item.key) : escapeHtml(keyText || "Unknown key")}</code>
@@ -125,14 +127,16 @@ function bindKeyResetButtons(root = document) {
       return;
     }
     if (!confirm("Reset the HWID for this key? Your current device binding will be cleared.")) return;
-    button.disabled = true; button.textContent = "Resetting…";
+    button.disabled = true;
+    button.textContent = "Resetting…";
     try {
       const data = await api("/api/client/discord/resethwid", { method: "POST", body: { keyId } });
       setMessage(`HWID reset successful. ${data.resetsRemaining == null ? "Reset completed." : `Resets remaining: ${data.resetsRemaining}`}`, true);
       await loadMyKeys();
     } catch (error) {
       setMessage(error.message || "HWID reset failed.");
-      button.disabled = false; button.textContent = "Reset HWID";
+      button.disabled = false;
+      button.textContent = "Reset HWID";
     }
   }));
 }
