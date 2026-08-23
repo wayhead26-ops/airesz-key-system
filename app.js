@@ -84,7 +84,7 @@ function renderKeyHistoryCard(item) {
   const keyText = item.key || maskKey(item.prefix);
   const canCopy = Boolean(item.key);
   const isActiveKey = cls === "active" || cls === "expiring";
-  const remainingResets = item.resetsRemaining == null ? ((item.plan === "LIFETIME" || item.source === "giveaway") ? 1 : null) : Number(item.resetsRemaining);
+  const remainingResets = item.resetsRemaining == null ? 1 : Number(item.resetsRemaining);
   const canReset = isActiveKey && remainingResets != null && remainingResets > 0;
   const action = item.state === "deleted"
     ? '<span class="key-history-note">This key was deleted and is no longer active.</span>'
