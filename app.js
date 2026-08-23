@@ -83,13 +83,42 @@ function maskKey(key) {
 }
 
 async function loadGames() {
+  let loaded = false;
   try {
     const data = await api("/api/games");
     state.games = Array.isArray(data.games) ? data.games : [];
-  } catch {
-    state.games = [];
+    loaded = true;
+  } catch (error) {
+    console.warn("Public game list request failed; trying status fallback.", error?.message || error);
+    try {
+      const status = await api("/api/status");
+      state.games = Array.isArray(status.games)
+        ? status.games.map(game => ({
+            id: game.id || game.gameId || "",
+            gameId: game.id || game.gameId || "",
+            name: game.name || "Untitled Game",
+            placeId: game.placeId || "",
+            placeIds: game.placeIds || [],
+            maintenance: game.status === "maintenance",
+            maintenanceMessage: "",
+            killSwitch: game.status === "major_outage",
+            latestVersion: game.version || "",
+            minClientVersion: "",
+            rolloutPercent: 100,
+            updatedAt: Number(game.updatedAt || 0)
+          }))
+        : [];
+      loaded = true;
+    } catch (fallbackError) {
+      console.warn("Game list fallback failed.", fallbackError?.message || fallbackError);
+      state.games = [];
+    }
   }
   renderGames();
+  if (!loaded) {
+    const target = $("#gamesGrid");
+    if (target) target.innerHTML = '<div class="loading-panel">Game list is temporarily unavailable. Please refresh in a moment.</div>';
+  }
 }
 
 function gameStatus(game) {
