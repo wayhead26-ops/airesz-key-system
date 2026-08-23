@@ -1,5 +1,7 @@
 const config = window.AIRESZ_CONFIG;
 const planSteps = Object.freeze({ "24H": 1, "48H": 2, "72H": 3 });
+const commerceState = { products: {}, loaded: false };
+const gamesState = { items: [], filter: "all", query: "" };
 const state = {
   plan: "24H",
   provider: "linkvertise",
@@ -11,12 +13,7 @@ const state = {
   historyKeys: [],
   historyTab: "active",
   discordToken: localStorage.getItem("airesz_discord_session") || "",
-  discordUser: null,
-  games: [],
-  gameFilter: "all",
-  gameSearch: "",
-  gameSort: "name",
-  commerce: null
+  discordUser: null
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -43,10 +40,9 @@ function saveIssuedKey(keyData) {
     prefix: keyData.prefix || keyData.key.slice(0, 20),
     plan: keyData.plan || "",
     provider: keyData.provider || "",
-    userId: keyData.userId || null,
-    hwidResetRemaining: keyData.hwidResetRemaining == null ? null : Number(keyData.hwidResetRemaining),
     issuedAt: Number(keyData.issuedAt || Math.floor(Date.now() / 1000)),
-    expiresAt: keyData.expiresAt == null ? null : Number(keyData.expiresAt)
+    expiresAt: keyData.expiresAt == null ? null : Number(keyData.expiresAt),
+    premium: Boolean(keyData.premium)
   };
   state.savedKeys = [next, ...state.savedKeys.filter(item => item.key !== next.key)].slice(0, 20);
   persistSavedKeys();
@@ -82,167 +78,23 @@ function maskKey(key) {
   return `${text.slice(0, 12)}…${text.slice(-4)}`;
 }
 
-async function loadGames() {
-  let loaded = false;
-  try {
-    const data = await api("/api/games");
-    state.games = Array.isArray(data.games) ? data.games : [];
-    loaded = true;
-  } catch (error) {
-    console.warn("Public game list request failed; trying status fallback.", error?.message || error);
-    try {
-      const status = await api("/api/status");
-      state.games = Array.isArray(status.games)
-        ? status.games.map(game => ({
-            id: game.id || game.gameId || "",
-            gameId: game.id || game.gameId || "",
-            name: game.name || "Untitled Game",
-            placeId: game.placeId || "",
-            placeIds: game.placeIds || [],
-            maintenance: game.status === "maintenance",
-            maintenanceMessage: "",
-            killSwitch: game.status === "major_outage",
-            latestVersion: game.version || "",
-            minClientVersion: "",
-            rolloutPercent: 100,
-            updatedAt: Number(game.updatedAt || 0)
-          }))
-        : [];
-      loaded = true;
-    } catch (fallbackError) {
-      console.warn("Game list fallback failed.", fallbackError?.message || fallbackError);
-      state.games = [];
-    }
-  }
-  renderGames();
-  if (!loaded) {
-    const target = $("#gamesGrid");
-    if (target) target.innerHTML = '<div class="loading-panel">Game list is temporarily unavailable. Please refresh in a moment.</div>';
-  }
-}
-
-function gameStatus(game) {
-  if (game.killSwitch) return ["Offline", "offline"];
-  if (game.maintenance) return ["Maintenance", "maintenance"];
-  return ["Online", "online"];
-}
-
-function gameIconUrl(game) {
-  const placeId = String(game.placeId || "");
-  return /^\d+$/.test(placeId)
-    ? `https://thumbnails.roblox.com/v1/places/gameicons?placeIds=${encodeURIComponent(placeId)}&returnPolicy=PlaceHolder&size=420x420&format=Png&isCircular=false`
-    : "";
-}
-
-function gameCard(game) {
-  const [status, cls] = gameStatus(game);
-  const iconApi = gameIconUrl(game);
-  const fallback = escapeHtml((game.name || "A").slice(0, 1).toUpperCase());
-  const updated = game.updatedAt ? new Date(Number(game.updatedAt) * 1000).toLocaleDateString() : "—";
-  const placeId = String(game.placeId || "");
-  const robloxUrl = /^\d+$/.test(placeId) ? `https://www.roblox.com/games/${placeId}` : "#get-key";
-  return `<article class="game-card ${cls}" data-name="${escapeHtml(game.name || "")}" data-status="${cls}">
-    <div class="game-art"><div class="game-fallback">${fallback}</div><img loading="lazy" alt="${escapeHtml(game.name || "Roblox game")}" data-game-icon="${escapeHtml(iconApi)}"><div class="game-status ${cls}"><span></span>${status}</div></div>
-    <div class="game-card-body"><div class="game-card-title"><div><h3>${escapeHtml(game.name || "Untitled Game")}</h3><span>${game.latestVersion ? `v${escapeHtml(game.latestVersion)}` : "Managed game"}</span></div><span class="game-updated">${updated}</span></div>
-      <p>${game.maintenanceMessage ? escapeHtml(game.maintenanceMessage) : "Airesz script access is available for this supported game."}</p>
-      <div class="game-card-actions"><a class="primary-button game-get-btn" href="#get-key">Get Access</a><a class="secondary-button game-view-btn" href="${robloxUrl}" target="_blank" rel="noopener noreferrer">View Game</a></div>
-    </div>
-  </article>`;
-}
-
-function renderGames() {
-  const target = $("#gamesGrid");
-  if (!target) return;
-  let games = [...state.games];
-  if (state.gameFilter === "online") games = games.filter(g => !g.maintenance && !g.killSwitch);
-  if (state.gameFilter === "maintenance") games = games.filter(g => g.maintenance || g.killSwitch);
-  const query = state.gameSearch.trim().toLowerCase();
-  if (query) games = games.filter(g => `${g.name || ""} ${g.gameId || ""} ${g.placeId || ""}`.toLowerCase().includes(query));
-  games.sort((a,b) => state.gameSort === "updated"
-    ? Number(b.updatedAt||0) - Number(a.updatedAt||0)
-    : state.gameSort === "status"
-      ? String(gameStatus(a)[0]).localeCompare(String(gameStatus(b)[0])) || String(a.name||"").localeCompare(String(b.name||""))
-      : String(a.name||"").localeCompare(String(b.name||""))
-  );
-  if (!games.length) { target.innerHTML = '<div class="loading-panel">No games match your search.</div>'; return; }
-  target.innerHTML = games.map(gameCard).join("");
-  target.querySelectorAll("img[data-game-icon]").forEach((img) => {
-    const source = img.dataset.gameIcon;
-    if (!source) return;
-    fetch(source).then(r => r.ok ? r.json() : null).then(data => {
-      const url = data?.data?.[0]?.imageUrl;
-      if (url) { img.src = url; img.classList.add("loaded"); img.previousElementSibling.style.opacity = "0"; }
-    }).catch(() => {});
-  });
-  target.querySelectorAll(".game-get-btn").forEach((btn) => btn.addEventListener("click", () => setTimeout(() => $("#get-key")?.scrollIntoView({behavior:"smooth",block:"start"}), 0)));
-}
-
-async function loadCommerceConfig() {
-  try {
-    const data = await api("/api/commerce/config");
-    state.commerce = data.products || null;
-    const premium = state.commerce?.premium;
-    const btn = $("#buyPremiumBtn");
-    const price = $("#premiumPrice");
-    if (premium?.available) {
-      if (price) price.textContent = `$${(Number(premium.amountCents||0)/100).toFixed(2)} ${String(premium.currency||"USD").toUpperCase()}`;
-      if (btn) { btn.disabled = false; btn.textContent = "💎 Get Premium"; btn.onclick = startPremiumCheckout; }
-    } else {
-      if (price) price.textContent = "Soon";
-      if (btn) { btn.disabled = true; btn.textContent = "Premium Coming Soon"; }
-    }
-  } catch {}
-}
-
-async function startPremiumCheckout() {
-  if (!state.commerce?.premium?.available) { setMessage("Premium is not enabled yet."); return; }
-  if (!state.discordUser) { localStorage.setItem("airesz_pending_premium_checkout", "1"); loginWithDiscord(); return; }
-  try {
-    const data = await api("/api/stripe/checkout", { method: "POST", body: { clientToken: state.clientToken, product: "PREMIUM" } });
-    if (!data.url) throw new Error("Premium checkout URL was not returned.");
-    location.href = data.url;
-  } catch (error) { setMessage(error.message); }
-}
-
-function isHwidResetEligible(item) {
-  const state = String(item?.state || "").toLowerCase();
-  if (!item?.id || state === "deleted" || state === "revoked" || state === "expired" || state === "hwid_mismatch") return false;
-  if (String(item.source || "") === "free" && ["24H", "48H", "72H"].includes(String(item.plan || ""))) {
-    return Number(item.hwidResetRemaining) > 0;
-  }
-  return String(item.plan || "") === "LIFETIME";
-}
-
 function renderKeyHistoryCard(item) {
   const [label, cls] = keyStateLabel(item);
   const keyText = item.key || maskKey(item.prefix);
   const canCopy = Boolean(item.key);
-  const resetEligible = isHwidResetEligible(item);
-  const copyButton = canCopy ? `<button class="key-history-copy" type="button" data-key="${encodeURIComponent(item.key)}">Copy Key</button>` : '';
-  const resetButton = resetEligible
-    ? `<button class="key-history-reset-hwid" type="button" data-key-id="${escapeHtml(item.id || '')}">Reset HWID</button>`
-    : '';
   const action = item.state === "deleted"
     ? '<span class="key-history-note">This key was deleted and is no longer active.</span>'
     : item.state === "hwid_mismatch"
     ? '<span class="key-history-note">Get a new key to continue.</span>'
-    : (copyButton || resetButton)
-      ? `${copyButton}${resetButton}`
+    : canCopy
+      ? `<button class="key-history-copy" data-key="${encodeURIComponent(item.key)}">Copy Key</button>`
       : '<span class="key-history-note">Enter the key below to recover.</span>';
 
   const keyTitle = item.source === "giveaway" ? "Giveaway Key" : item.plan ? `${item.plan} Key` : "Airesz Key";
-  const isFreeResetPlan = item.source === "free" && ["24H", "48H", "72H"].includes(String(item.plan || ""));
-  const resetMeta = isFreeResetPlan
-    ? `<span>HWID Reset: ${Number(item.hwidResetRemaining) > 0 ? `${Number(item.hwidResetRemaining)} remaining` : "0 remaining"}</span>`
-    : String(item.plan || "") === "LIFETIME"
-      ? '<span>HWID Reset: Available after Discord verification</span>'
-      : '';
-
   return `<article class="key-history-card ${cls} ${item.source === "giveaway" ? "giveaway" : ""}">
-    <div class="key-history-top"><div><span class="key-state-pill ${cls}">${label}</span><strong>${keyTitle}</strong></div><span class="key-history-time">${item.expiresAt == null ? "Lifetime" : remainingText(item.expiresAt)}</span></div>
+    <div class="key-history-top"><div><span class="key-state-pill ${cls}">${label}</span>${item.premium ? '<span class="premium-chip">💎 PREMIUM</span>' : ""}<strong>${keyTitle}</strong></div><span class="key-history-time">${item.expiresAt == null ? "Lifetime" : remainingText(item.expiresAt)}</span></div>
     <code>${canCopy ? escapeHtml(item.key) : escapeHtml(keyText || "Unknown key")}</code>
     <div class="key-history-meta"><span>Issued ${item.issuedAt ? new Date(Number(item.issuedAt) * 1000).toLocaleString() : "—"}</span><span>${item.expiresAt == null ? "No expiry" : `Expires ${new Date(Number(item.expiresAt) * 1000).toLocaleString()}`}</span></div>
-    <div class="key-history-meta"><span>User ID: ${item.userId ? escapeHtml(String(item.userId)) : "Not linked yet"}</span>${resetMeta}</div>
     <div class="key-history-actions">${action}</div>
   </article>`;
 }
@@ -255,32 +107,6 @@ function bindKeyCopyButtons(root = document) {
       setTimeout(() => { button.textContent = "Copy Key"; }, 1200);
     } catch {
       setMessage("Clipboard permission was blocked.");
-    }
-  }));
-
-  root.querySelectorAll(".key-history-reset-hwid").forEach(button => button.addEventListener("click", async () => {
-    if (!state.discordUser) {
-      setMessage("Login with Discord to verify ownership before resetting your HWID.");
-      loginWithDiscord();
-      return;
-    }
-    const keyId = String(button.dataset.keyId || "").trim();
-    if (!keyId) return;
-    button.disabled = true;
-    button.textContent = "Resetting...";
-    try {
-      const headers = state.discordToken ? { Authorization: `Bearer ${state.discordToken}` } : {};
-      const data = await api("/api/client/discord/resethwid", {
-        method: "POST",
-        headers,
-        body: { clientToken: state.clientToken, keyId }
-      });
-      setMessage(data.ok ? "HWID reset successful." : "HWID reset failed.");
-      await loadMyKeys();
-    } catch (error) {
-      setMessage(error.message || "HWID reset failed.");
-      button.disabled = false;
-      button.textContent = "Reset HWID";
     }
   }));
 }
@@ -388,6 +214,75 @@ async function recoverKey() {
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>\"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'\"':"&quot;", "'":"&#39;"}[char]));
+}
+
+async function loadCommerceConfig() {
+  try {
+    const data = await api("/api/commerce/config");
+    Object.assign(commerceState.products, data.products || {});
+    commerceState.loaded = true;
+    const premium = commerceState.products.premium || {};
+    const premiumButtons = [$("#buyPremiumBtn"), $("#pricingPremiumBtn")].filter(Boolean);
+    premiumButtons.forEach((button) => {
+      const available = Boolean(premium.available);
+      button.disabled = !available;
+      button.classList.toggle("is-ready", available);
+      const price = premium.amountCents ? `${(premium.amountCents / 100).toFixed(2).replace(/\.00$/, "")} ${String(premium.currency || "usd").toUpperCase()}` : "";
+      const small = button.querySelector("small");
+      if (small) small.textContent = available ? price : "Coming soon";
+      if (button.id === "pricingPremiumBtn") button.textContent = available ? `💎 Buy Premium · ${price}` : "💎 Buy Premium ";
+    });
+    const premiumPrice = $("#premiumPrice");
+    if (premiumPrice) premiumPrice.innerHTML = premium.available && premium.amountCents ? `$${(premium.amountCents / 100).toFixed(2).replace(/\.00$/, "")} <small>${String(premium.currency || "usd").toUpperCase()}</small>` : "Coming Soon";
+  } catch (error) {
+    console.warn("Commerce config unavailable", error);
+  }
+}
+
+async function loadGames() {
+  const target = $("#gamesGrid");
+  if (!target) return;
+  try {
+    const data = await api("/api/games");
+    gamesState.items = Array.isArray(data.games) ? data.games : [];
+    renderGames();
+  } catch (error) {
+    target.innerHTML = `<div class="game-loading error-state">Unable to load games right now.</div>`;
+    console.warn("Games load failed", error);
+  }
+}
+
+function gameMatches(item) {
+  const q = gamesState.query.trim().toLowerCase();
+  const status = item.maintenance ? "maintenance" : "online";
+  if (gamesState.filter !== "all" && gamesState.filter !== status) return false;
+  return !q || `${item.name} ${item.gameId || ""} ${item.version || ""}`.toLowerCase().includes(q);
+}
+
+function renderGames() {
+  const target = $("#gamesGrid");
+  if (!target) return;
+  const items = gamesState.items.filter(gameMatches);
+  if (!items.length) { target.innerHTML = '<div class="game-loading">No supported games match your search.</div>'; return; }
+  target.innerHTML = items.map((game) => {
+    const status = game.maintenance ? "Maintenance" : "Supported";
+    const statusClass = game.maintenance ? "maintenance" : "online";
+    const icon = game.iconUrl || "assets/airesz-mark.png";
+    const version = game.version ? `v${escapeHtml(game.version)}` : "Ready";
+    const features = Array.isArray(game.features) ? game.features.slice(0, 4) : ["Game Script", "HWID Protected", "Cloud Verified", "Regular Updates"];
+    return `<article class="game-card">
+      <div class="game-cover"><img src="${escapeHtml(icon)}" alt="${escapeHtml(game.name)}"><span class="game-status ${statusClass}"><i></i>${status}</span></div>
+      <div class="game-card-body"><div class="game-card-title"><div><span class="game-place">Roblox Game</span><h3>${escapeHtml(game.name)}</h3></div><span class="game-version">${version}</span></div>
+      <div class="game-feature-list">${features.map((feature) => `<span>✓ ${escapeHtml(feature)}</span>`).join("")}</div>
+      <a class="game-view-button" href="#get-key" data-game-name="${escapeHtml(game.name)}">Get Script <span>→</span></a></div>
+    </article>`;
+  }).join("");
+  target.querySelectorAll("[data-game-name]").forEach((node) => node.addEventListener("click", () => { const label = node.dataset.gameName; if(label) { setMessage(`Selected ${label}. Choose a key route below.`, true); } }));
+}
+
+function bindGameControls() {
+  $("#gameSearch")?.addEventListener("input", (event) => { gamesState.query = event.target.value || ""; renderGames(); });
+  $("#gameFilter")?.addEventListener("change", (event) => { gamesState.filter = event.target.value || "all"; renderGames(); });
 }
 
 function getClientToken() {
@@ -815,6 +710,11 @@ $$(".provider").forEach((button) => button.addEventListener("click", () => {
 }));
 
 $("#startBtn").addEventListener("click", startRoute);
+$("#buyLifetimeBtn")?.addEventListener("click", () => startProductCheckout("LIFETIME"));
+$("#buyPremiumBtn")?.addEventListener("click", () => startProductCheckout("PREMIUM"));
+$("#pricingPremiumBtn")?.addEventListener("click", () => startProductCheckout("PREMIUM"));
+$$(`button[data-product="LIFETIME"]`).forEach((button) => button.addEventListener("click", () => startProductCheckout("LIFETIME")));
+bindGameControls();
 $("#cancelBtn").addEventListener("click", cancelRoute);
 $("#copyBtn").addEventListener("click", async () => {
   try {
@@ -838,45 +738,32 @@ $("#discordLoginBtn")?.addEventListener("click", loginWithDiscord);
 $("#topLoginBtn")?.addEventListener("click", () => state.discordUser ? $(".identity-gateway")?.scrollIntoView({ behavior: "smooth" }) : loginWithDiscord());
 $("#discordLogoutBtn")?.addEventListener("click", logoutDiscord);
 $("#discordLogoutAllBtn")?.addEventListener("click", logoutAllDiscordDevices);
-$("#heroLifetimeBtn")?.addEventListener("click", () => $("#buyLifetimeBtn")?.click());
-$("#gameSearch")?.addEventListener("input", (event) => { state.gameSearch = event.target.value; renderGames(); });
-$("#gameSort")?.addEventListener("change", (event) => { state.gameSort = event.target.value; renderGames(); });
-$$(".game-filter").forEach((button) => button.addEventListener("click", () => { state.gameFilter = button.dataset.gameFilter || "all"; $$(".game-filter").forEach(b => b.classList.toggle("active", b === button)); renderGames(); }));
-async function startLifetimeCheckout() {
-  const params = new URLSearchParams(location.search);
-  const discordLinkToken = params.get("discord_link") || "";
+async function startProductCheckout(product = "LIFETIME") {
+  const normalized = String(product || "LIFETIME").toUpperCase();
+  const discordLinkToken = new URLSearchParams(location.search).get("discord_link") || "";
   if (!state.discordUser && !discordLinkToken) {
-    localStorage.setItem("airesz_pending_lifetime_checkout", "1");
-    setMessage("Login with Discord before buying Lifetime. Returning you to checkout after login…", true);
+    localStorage.setItem("airesz_pending_product_checkout", normalized);
+    setMessage("Login with Discord before buying. Returning you to checkout after login…", true);
     loginWithDiscord();
     return;
   }
-  const button = $("#buyLifetimeBtn");
-  if (button) {
-    button.disabled = true;
-    button.textContent = "Opening Checkout…";
-  }
-  setMessage("Opening secure Stripe Checkout…", true);
+  const buttons = [$("#buyLifetimeBtn"), $("#buyPremiumBtn"), $("#pricingPremiumBtn"), ...$$(`button[data-product="${normalized}"]`)].filter(Boolean);
+  buttons.forEach((button) => { button.disabled = true; });
+  setMessage(`Opening secure Stripe Checkout for ${normalized === "PREMIUM" ? "Premium" : "Lifetime"}…`, true);
   try {
-    const data = await api("/api/stripe/checkout", {
-      method: "POST",
-      body: {
-        clientToken: state.clientToken,
-        ...(discordLinkToken ? { discordLinkToken } : {})
-      }
-    });
+    const data = await api("/api/stripe/checkout", { method: "POST", body: { clientToken: state.clientToken, product: normalized, ...(discordLinkToken ? { discordLinkToken } : {}) } });
     if (!data.url) throw new Error("Stripe checkout URL was not returned.");
     location.href = data.url;
   } catch (error) {
     setMessage(error.message);
-    if (button) {
-      button.disabled = false;
-      button.textContent = "💎 Buy Lifetime · $5";
-    }
-  }
+    await loadCommerceConfig();
+  } finally { buttons.forEach((button) => { if (button) button.disabled = false; }); }
 }
 
-$("#buyLifetimeBtn")?.addEventListener("click", startLifetimeCheckout);
+async function startLifetimeCheckout() {
+  return startProductCheckout("LIFETIME");
+}
+
 
 async function handleStripeReturn() {
   const params = new URLSearchParams(location.search);
@@ -892,7 +779,8 @@ async function handleStripeReturn() {
 
   if (success !== "1" || !sessionId) return;
 
-  setMessage("Payment confirmed by Stripe. Preparing your Lifetime key…", true);
+  const claimedProduct = params.get("product") === "PREMIUM" ? "Premium" : "Lifetime";
+  setMessage(`Payment confirmed by Stripe. Preparing your ${claimedProduct} access…`, true);
   try {
     const data = await api("/api/stripe/claim", {
       method: "POST",
@@ -905,7 +793,7 @@ async function handleStripeReturn() {
     $("#keyBox").classList.remove("hidden");
     $("#routeState").textContent = "Lifetime Unlocked";
     await loadMyKeys();
-    setMessage("🎉 Lifetime purchase complete. Your permanent key is ready.", true);
+    setMessage(data.premium ? "🎉 Premium purchase complete. Your Lifetime key now has Premium access." : "🎉 Lifetime purchase complete. Your permanent key is ready.", true);
     location.hash = "my-keys";
   } catch (error) {
     setMessage(error.message || "We could not claim your Lifetime key yet.");
@@ -916,13 +804,6 @@ async function handleStripeReturn() {
 
 (async function init() {
   const params = new URLSearchParams(location.search);
-  // Expose a deterministic retry path for the public Game List.
-  window.addEventListener("pageshow", () => {
-    const grid = $("#gamesGrid");
-    if (grid && /Loading supported games/i.test(grid.textContent || "")) {
-      loadGames().catch(error => console.warn("Game List retry failed", error?.message || error));
-    }
-  });
   restoreSession();
   selectUi();
   updateSelection();
@@ -931,32 +812,21 @@ async function handleStripeReturn() {
     await restoreDiscordLogin();
     if (state.discordUser) {
       await linkLegacyLifetimePurchases();
-      if (localStorage.getItem("airesz_pending_lifetime_checkout") === "1") {
+      const pendingProduct = localStorage.getItem("airesz_pending_product_checkout") || (localStorage.getItem("airesz_pending_lifetime_checkout") === "1" ? "LIFETIME" : "");
+      if (pendingProduct) {
+        localStorage.removeItem("airesz_pending_product_checkout");
         localStorage.removeItem("airesz_pending_lifetime_checkout");
-        await startLifetimeCheckout();
-        return;
-      }
-      if (localStorage.getItem("airesz_pending_premium_checkout") === "1") {
-        localStorage.removeItem("airesz_pending_premium_checkout");
-        await startPremiumCheckout();
+        await startProductCheckout(pendingProduct);
         return;
       }
     }
     if (location.hash === "#buy-lifetime") {
       setTimeout(() => $("#buyLifetimeBtn")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
     }
+    await loadCommerceConfig();
+    await loadGames();
     await loadProviders();
-    // Always initialize the public game list explicitly before loading the rest of the page.
-    // This keeps the Game List from remaining on its loading state when other startup
-    // requests are slow or fail.
-    try {
-      await loadGames();
-    } catch (error) {
-      console.error("Game List initialization failed", error);
-      const target = $("#gamesGrid");
-      if (target) target.innerHTML = '<div class="loading-panel">Unable to load the game list. Please refresh.</div>';
-    }
-    await Promise.allSettled([loadCommerceConfig(), loadMyKeys()]);
+    await loadMyKeys();
     await handleStripeReturn();
     if (!state.session) await discoverActiveSession();
     if (state.session) {
