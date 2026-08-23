@@ -916,6 +916,13 @@ async function handleStripeReturn() {
 
 (async function init() {
   const params = new URLSearchParams(location.search);
+  // Expose a deterministic retry path for the public Game List.
+  window.addEventListener("pageshow", () => {
+    const grid = $("#gamesGrid");
+    if (grid && /Loading supported games/i.test(grid.textContent || "")) {
+      loadGames().catch(error => console.warn("Game List retry failed", error?.message || error));
+    }
+  });
   restoreSession();
   selectUi();
   updateSelection();
@@ -939,8 +946,17 @@ async function handleStripeReturn() {
       setTimeout(() => $("#buyLifetimeBtn")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
     }
     await loadProviders();
-    await Promise.allSettled([loadGames(), loadCommerceConfig()]);
-    await loadMyKeys();
+    // Always initialize the public game list explicitly before loading the rest of the page.
+    // This keeps the Game List from remaining on its loading state when other startup
+    // requests are slow or fail.
+    try {
+      await loadGames();
+    } catch (error) {
+      console.error("Game List initialization failed", error);
+      const target = $("#gamesGrid");
+      if (target) target.innerHTML = '<div class="loading-panel">Unable to load the game list. Please refresh.</div>';
+    }
+    await Promise.allSettled([loadCommerceConfig(), loadMyKeys()]);
     await handleStripeReturn();
     if (!state.session) await discoverActiveSession();
     if (state.session) {
