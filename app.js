@@ -248,7 +248,7 @@ async function loadGames() {
     gamesState.items = Array.isArray(data.games) ? data.games : [];
     renderGames();
   } catch (error) {
-    target.innerHTML = `<div class="game-loading error-state">Unable to load games right now.</div>`;
+    target.innerHTML = `<div class="game-loading error-state">Unable to load games right now.<br><small>${escapeHtml(error?.message || "Unknown error")}</small></div>`;
     console.warn("Games load failed", error);
   }
 }
