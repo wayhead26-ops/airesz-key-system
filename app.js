@@ -369,16 +369,21 @@ function closeGameModal() {
 }
 
 async function copyGameScript(game, sourceButton) {
-  if (!game || game.maintenance) return;
+  if (!game || game.maintenance) return false;
   const loadstring = getGameLoadstring();
   const copied = await copyText(loadstring);
   if (copied) {
-    sourceButton.textContent = "Copied ✓";
+    if (sourceButton) {
+      sourceButton.textContent = "Copied ✓";
+      setTimeout(() => { sourceButton.textContent = "Get Script"; }, 1600);
+    }
+    showToast(`${game.name} loadstring copied ✓`, true);
     setMessage(`${game.name} loadstring copied.`, true);
-    setTimeout(() => { sourceButton.textContent = "Get Script"; }, 1600);
-  } else {
-    setMessage("Clipboard permission was blocked.");
+    return true;
   }
+  showToast("Clipboard permission was blocked.", false);
+  setMessage("Clipboard permission was blocked.");
+  return false;
 }
 
 function scrollToGameKey(gameName) {
@@ -400,9 +405,11 @@ function renderGames() {
     const statusClass = game.maintenance ? "maintenance" : "online";
     const icon = game.iconUrl || "assets/airesz-mark.png";
     const version = game.version ? `v${escapeHtml(game.version)}` : "Ready";
-    const features = Array.isArray(game.features) && game.features.length
+    const placeId = getGamePlaceId(game);
+    const standardFeatures = Array.isArray(game.features) && game.features.length
       ? game.features.slice(0, 3)
       : ["Game Script", "HWID Protected", "Cloud Verified"];
+    const premiumFeatures = Array.isArray(game.premiumFeatures) ? game.premiumFeatures.slice(0, 2) : [];
     const gameId = `game-${index}`;
     const payload = encodeURIComponent(JSON.stringify(game));
     return `<article class="game-card" data-game-id="${gameId}">
@@ -513,6 +520,10 @@ async function handleDiscordLoginReturn() {
   history.replaceState({}, "", clean);
   renderDiscordIdentity();
   setMessage(`Welcome, ${data.user.username}. Your Discord key history is connected.`, true);
+  if (localStorage.getItem("airesz_pending_hwid_reset") === "1") {
+    localStorage.removeItem("airesz_pending_hwid_reset");
+    setTimeout(() => resetHwidFromWebsite(), 250);
+  }
 }
 
 async function restoreDiscordLogin() {
@@ -555,6 +566,30 @@ async function logoutAllDiscordDevices() {
   }
 }
 
+async function resetHwidFromWebsite() {
+  if (!state.discordUser) {
+    localStorage.setItem("airesz_pending_hwid_reset", "1");
+    showToast("Login with Discord first to reset your HWID.", false);
+    loginWithDiscord();
+    return;
+  }
+  if (!confirm("Reset your Discord-linked HWID now? This consumes one available HWID reset and is shared with /resethwid in Discord.")) return;
+  const button = $("#resetHwidBtn");
+  if (button) { button.disabled = true; button.textContent = "Resetting…"; }
+  try {
+    const data = await api("/api/client/discord/reset-hwid-web", { method: "POST", body: {} });
+    const remaining = data.resetsRemaining == null ? "Unlimited" : String(data.resetsRemaining);
+    showToast(`HWID reset successful ✓ · ${remaining} reset${remaining === "1" ? "" : "s"} remaining`, true);
+    setMessage("HWID reset successfully. You can use the key on another device.", true);
+    await loadMyKeys();
+  } catch (error) {
+    showToast(error?.message || "HWID reset failed.", false);
+    setMessage(error?.message || "HWID reset failed.");
+  } finally {
+    if (button) { button.disabled = false; button.textContent = "Reset HWID"; }
+  }
+}
+
 async function linkLegacyLifetimePurchases() {
   if (!state.discordUser || !state.clientToken) return 0;
   const data = await api("/api/stripe/link-discord", {
@@ -568,8 +603,27 @@ async function linkLegacyLifetimePurchases() {
 
 function setMessage(text = "", ok = false) {
   const node = $("#message");
+  if (!node) return;
   node.textContent = text;
   node.style.color = ok ? "#28dd8b" : "#ff6f8f";
+}
+
+let toastTimer = null;
+function showToast(text, ok = true) {
+  let node = $("#aireszToast");
+  if (!node) {
+    node = document.createElement("div");
+    node.id = "aireszToast";
+    node.className = "airesz-toast";
+    node.setAttribute("role", "status");
+    node.setAttribute("aria-live", "polite");
+    document.body.appendChild(node);
+  }
+  node.textContent = text;
+  node.classList.toggle("error", !ok);
+  node.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => node.classList.remove("show"), 2200);
 }
 
 function providerLabel() {
@@ -865,6 +919,16 @@ $$(".provider").forEach((button) => button.addEventListener("click", () => {
   updateSelection();
 }));
 
+$("#heroGetScriptBtn")?.addEventListener("click", async () => {
+  const copied = await copyText(getGameLoadstring());
+  if (copied) {
+    showToast("Airesz loadstring copied ✓", true);
+    setMessage("Airesz loadstring copied.", true);
+  } else {
+    showToast("Clipboard permission was blocked.", false);
+    setMessage("Clipboard permission was blocked.");
+  }
+});
 $("#startBtn").addEventListener("click", startRoute);
 $("#buyLifetimeBtn")?.addEventListener("click", () => startProductCheckout("LIFETIME"));
 $("#buyPremiumBtn")?.addEventListener("click", () => startProductCheckout("PREMIUM"));
@@ -879,8 +943,8 @@ $("#gameModalScriptBtn")?.addEventListener("click", async () => {
   try {
     const game = JSON.parse(modal?.dataset.gameJson || "null");
     if (game) {
-      await copyGameScript(game, $("#gameModalScriptBtn"));
-      $("#gameModalNotice").textContent = `Copied: ${getGameLoadstring()}`;
+      const copied = await copyGameScript(game, $("#gameModalScriptBtn"));
+      $("#gameModalNotice").textContent = copied ? `Copied: ${getGameLoadstring()}` : "Clipboard permission was blocked.";
     }
   } catch {}
 });
@@ -913,6 +977,7 @@ $("#discordLoginBtn")?.addEventListener("click", loginWithDiscord);
 $("#topLoginBtn")?.addEventListener("click", () => state.discordUser ? $(".identity-gateway")?.scrollIntoView({ behavior: "smooth" }) : loginWithDiscord());
 $("#discordLogoutBtn")?.addEventListener("click", logoutDiscord);
 $("#discordLogoutAllBtn")?.addEventListener("click", logoutAllDiscordDevices);
+$("#resetHwidBtn")?.addEventListener("click", resetHwidFromWebsite);
 async function startProductCheckout(product = "LIFETIME") {
   const normalized = String(product || "LIFETIME").toUpperCase();
   const discordLinkToken = new URLSearchParams(location.search).get("discord_link") || "";
