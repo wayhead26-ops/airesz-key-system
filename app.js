@@ -84,19 +84,21 @@ function renderKeyHistoryCard(item) {
   const keyText = item.key || maskKey(item.prefix);
   const canCopy = Boolean(item.key);
   const isActiveKey = cls === "active" || cls === "expiring";
+  const remainingResets = item.resetsRemaining == null ? ((item.plan === "LIFETIME" || item.source === "giveaway") ? 1 : null) : Number(item.resetsRemaining);
+  const canReset = isActiveKey && remainingResets != null && remainingResets > 0;
   const action = item.state === "deleted"
     ? '<span class="key-history-note">This key was deleted and is no longer active.</span>'
     : item.state === "hwid_mismatch"
     ? '<span class="key-history-note">Get a new key to continue.</span>'
     : canCopy
-      ? `<div class="key-history-action-group"><button class="key-history-copy" type="button" data-key="${encodeURIComponent(item.key)}">Copy Key</button>${isActiveKey ? '<button class="key-history-reset" type="button" data-reset-hwid>↻ Reset HWID</button>' : ''}</div>`
+      ? `<div class="key-history-action-group"><button class="key-history-copy" type="button" data-key="${encodeURIComponent(item.key)}">Copy Key</button>${canReset ? `<button class="key-history-reset" type="button" data-reset-hwid data-key-id="${escapeHtml(item.id || "")}">↻ Reset HWID</button>` : ''}</div>`
       : '<span class="key-history-note">Enter the key below to recover.</span>';
 
   const keyTitle = item.source === "giveaway" ? "Giveaway Key" : item.plan ? `${item.plan} Key` : "Airesz Key";
   return `<article class="key-history-card ${cls} ${item.source === "giveaway" ? "giveaway" : ""}">
     <div class="key-history-top"><div><span class="key-state-pill ${cls}">${label}</span>${item.premium ? '<span class="premium-chip">💎 PREMIUM</span>' : ""}<strong>${keyTitle}</strong></div><span class="key-history-time">${item.expiresAt == null ? "Lifetime" : remainingText(item.expiresAt)}</span></div>
     <code>${canCopy ? escapeHtml(item.key) : escapeHtml(keyText || "Unknown key")}</code>
-    <div class="key-history-meta"><span>Issued ${item.issuedAt ? new Date(Number(item.issuedAt) * 1000).toLocaleString() : "—"}</span><span>${item.expiresAt == null ? "No expiry" : `Expires ${new Date(Number(item.expiresAt) * 1000).toLocaleString()}`}</span>${item.maxResets == null ? "" : `<span>HWID Reset: ${Math.max(0, Number(item.resetsRemaining ?? (Number(item.maxResets) - Number(item.resetCount || 0))))} remaining</span>`}</div>
+    <div class="key-history-meta"><span>Issued ${item.issuedAt ? new Date(Number(item.issuedAt) * 1000).toLocaleString() : "—"}</span><span>${item.expiresAt == null ? "No expiry" : `Expires ${new Date(Number(item.expiresAt) * 1000).toLocaleString()}`}</span>${remainingResets == null ? "" : `<span>HWID Reset: ${Math.max(0, remainingResets)} remaining</span>`}</div>
     <div class="key-history-actions">${action}</div>
   </article>`;
 }
@@ -117,7 +119,7 @@ function bindKeyCopyButtons(root = document) {
 
 function bindHwidResetButtons(root = document) {
   root.querySelectorAll("[data-reset-hwid]").forEach(button => {
-    button.addEventListener("click", () => resetHwidFromWebsite(button));
+    button.addEventListener("click", () => resetHwidFromWebsite(button, button.dataset.keyId || ""));
   });
 }
 
@@ -568,9 +570,12 @@ async function handleDiscordLoginReturn() {
   history.replaceState({}, "", clean);
   renderDiscordIdentity();
   setMessage(`Welcome, ${data.user.username}. Your Discord key history is connected.`, true);
-  if (localStorage.getItem("airesz_pending_hwid_reset") === "1") {
+  const pendingResetRaw = localStorage.getItem("airesz_pending_hwid_reset");
+  if (pendingResetRaw) {
     localStorage.removeItem("airesz_pending_hwid_reset");
-    setTimeout(() => resetHwidFromWebsite(), 250);
+    let pending = {};
+    try { pending = JSON.parse(pendingResetRaw) || {}; } catch {}
+    setTimeout(() => resetHwidFromWebsite(null, String(pending.keyId || "")), 250);
   }
 }
 
@@ -614,9 +619,9 @@ async function logoutAllDiscordDevices() {
   }
 }
 
-async function resetHwidFromWebsite(button = null) {
+async function resetHwidFromWebsite(button = null, keyId = "") {
   if (!state.discordUser) {
-    localStorage.setItem("airesz_pending_hwid_reset", "1");
+    localStorage.setItem("airesz_pending_hwid_reset", JSON.stringify({ keyId: String(keyId || "") }));
     showToast("Login with Discord first to reset your HWID.", false);
     loginWithDiscord();
     return;
@@ -624,7 +629,7 @@ async function resetHwidFromWebsite(button = null) {
   if (!confirm("Reset your Discord-linked HWID now? This consumes one available HWID reset and is shared with /resethwid in Discord.")) return;
   if (button) { button.disabled = true; button.textContent = "Resetting…"; }
   try {
-    const data = await api("/api/client/discord/reset-hwid-web", { method: "POST", body: {} });
+    const data = await api("/api/client/discord/reset-hwid-web", { method: "POST", body: { keyId: keyId || undefined } });
     const remaining = data.resetsRemaining == null ? "Unlimited" : String(data.resetsRemaining);
     showToast(`HWID reset successful ✓ · ${remaining} reset${remaining === "1" ? "" : "s"} remaining`, true);
     setMessage("HWID reset successfully. You can use the key on another device.", true);
