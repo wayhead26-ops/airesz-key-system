@@ -11,7 +11,7 @@
 .lifetime-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}.lifetime-buy-button{min-height:44px;cursor:pointer}.lifetime-buy-button:disabled{opacity:.65;cursor:wait}
 
 
-/* v6.3.15 key-history reset + clipboard feedback */
+/* v6.3.17 game status labels: Online / Maintenance */
 .reset-hwid-button{width:auto;min-width:130px;margin-top:0;white-space:nowrap}
 .reset-hwid-button:disabled{opacity:.6;cursor:wait}
 .airesz-toast{position:fixed;right:20px;bottom:20px;z-index:100;max-width:min(420px,calc(100vw - 40px));padding:12px 16px;border:1px solid rgba(40,221,139,.3);border-radius:12px;background:rgba(10,12,20,.96);box-shadow:0 18px 50px rgba(0,0,0,.45);color:#d8ffe9;font-size:.72rem;font-weight:800;opacity:0;transform:translateY(10px);pointer-events:none;transition:.2s}

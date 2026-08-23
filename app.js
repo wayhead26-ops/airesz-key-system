@@ -371,7 +371,7 @@ async function copyText(text) {
 function openGameModal(game) {
   const modal = $("#gameModal");
   if (!modal || !game) return;
-  const status = game.maintenance ? "Maintenance" : "Supported";
+  const status = game.maintenance ? "Maintenance" : "Online";
   const statusClass = game.maintenance ? "maintenance" : "online";
   const placeId = getGamePlaceId(game);
   const icon = game.iconUrl || "assets/airesz-mark.png";
@@ -449,7 +449,7 @@ function renderGames() {
   const items = gamesState.items.filter(gameMatches);
   if (!items.length) { target.innerHTML = '<div class="game-loading">No supported games match your search.</div>'; return; }
   target.innerHTML = items.map((game, index) => {
-    const status = game.maintenance ? "Maintenance" : "Supported";
+    const status = game.maintenance ? "Maintenance" : "Online";
     const statusClass = game.maintenance ? "maintenance" : "online";
     const icon = game.iconUrl || "assets/airesz-mark.png";
     const version = game.version ? `v${escapeHtml(game.version)}` : "Ready";
