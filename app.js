@@ -96,7 +96,7 @@ function renderKeyHistoryCard(item) {
   return `<article class="key-history-card ${cls} ${item.source === "giveaway" ? "giveaway" : ""}">
     <div class="key-history-top"><div><span class="key-state-pill ${cls}">${label}</span>${item.premium ? '<span class="premium-chip">💎 PREMIUM</span>' : ""}<strong>${keyTitle}</strong></div><span class="key-history-time">${item.expiresAt == null ? "Lifetime" : remainingText(item.expiresAt)}</span></div>
     <code>${canCopy ? escapeHtml(item.key) : escapeHtml(keyText || "Unknown key")}</code>
-    <div class="key-history-meta"><span>Issued ${item.issuedAt ? new Date(Number(item.issuedAt) * 1000).toLocaleString() : "—"}</span><span>${item.expiresAt == null ? "No expiry" : `Expires ${new Date(Number(item.expiresAt) * 1000).toLocaleString()}`}</span></div>
+    <div class="key-history-meta"><span>Issued ${item.issuedAt ? new Date(Number(item.issuedAt) * 1000).toLocaleString() : "—"}</span><span>${item.expiresAt == null ? "No expiry" : `Expires ${new Date(Number(item.expiresAt) * 1000).toLocaleString()}`}</span>${item.maxResets == null ? "" : `<span>HWID Reset: ${Math.max(0, Number(item.resetsRemaining ?? (Number(item.maxResets) - Number(item.resetCount || 0))))} remaining</span>`}</div>
     <div class="key-history-actions">${action}</div>
   </article>`;
 }
