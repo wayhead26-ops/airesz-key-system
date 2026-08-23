@@ -58,7 +58,7 @@ function keyStateLabel(item) {
   if (item.state === "paused") return ["Paused", "paused"];
   if (item.state === "expired") return ["Expired", "expired"];
   if (item.expiresAt != null && Number(item.expiresAt) <= now) return ["Expired", "expired"];
-  if (item.expiresAt != null && Number(item.expiresAt) - now <= 86400) return ["Expiring Soon", "expiring"];
+  if (item.expiresAt != null && Number(item.expiresAt) - now <= 43200) return ["Expiring Soon", "expiring"];
   return ["Active", "active"];
 }
 
@@ -83,12 +83,13 @@ function renderKeyHistoryCard(item) {
   const [label, cls] = keyStateLabel(item);
   const keyText = item.key || maskKey(item.prefix);
   const canCopy = Boolean(item.key);
+  const isActiveKey = cls === "active" || cls === "expiring";
   const action = item.state === "deleted"
     ? '<span class="key-history-note">This key was deleted and is no longer active.</span>'
     : item.state === "hwid_mismatch"
     ? '<span class="key-history-note">Get a new key to continue.</span>'
     : canCopy
-      ? `<button class="key-history-copy" data-key="${encodeURIComponent(item.key)}">Copy Key</button>`
+      ? `<div class="key-history-action-group"><button class="key-history-copy" type="button" data-key="${encodeURIComponent(item.key)}">Copy Key</button>${isActiveKey ? '<button class="key-history-reset" type="button" data-reset-hwid>↻ Reset HWID</button>' : ''}</div>`
       : '<span class="key-history-note">Enter the key below to recover.</span>';
 
   const keyTitle = item.source === "giveaway" ? "Giveaway Key" : item.plan ? `${item.plan} Key` : "Airesz Key";
@@ -102,14 +103,22 @@ function renderKeyHistoryCard(item) {
 
 function bindKeyCopyButtons(root = document) {
   root.querySelectorAll(".key-history-copy").forEach(button => button.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(decodeURIComponent(button.dataset.key));
-      button.textContent = "Copied";
+    const copied = await copyText(decodeURIComponent(button.dataset.key || ""));
+    if (copied) {
+      button.textContent = "Copied ✓";
+      showToast("Key copied ✓", true);
       setTimeout(() => { button.textContent = "Copy Key"; }, 1200);
-    } catch {
+    } else {
+      showToast("Clipboard permission was blocked.", false);
       setMessage("Clipboard permission was blocked.");
     }
   }));
+}
+
+function bindHwidResetButtons(root = document) {
+  root.querySelectorAll("[data-reset-hwid]").forEach(button => {
+    button.addEventListener("click", () => resetHwidFromWebsite(button));
+  });
 }
 
 function renderMyKeys() {
@@ -160,6 +169,7 @@ function renderMyKeys() {
     ? selectedItems.map(renderKeyHistoryCard).join("")
     : `<div class="empty-state">${emptyLabel}</div>`;
   bindKeyCopyButtons(target);
+  bindHwidResetButtons(target);
 }
 
 async function loadMyKeys() {
@@ -217,6 +227,27 @@ function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>\"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'\"':"&quot;", "'":"&#39;"}[char]));
 }
 
+
+async function loadGlobalMaintenanceStatus() {
+  try {
+    const data = await api("/api/status");
+    const pill = $("#globalMaintenancePill");
+    const banner = $("#maintenanceBanner");
+    const bannerMessage = $("#maintenanceBannerMessage");
+    const maintenance = data.status === "maintenance" || data.status === "major_outage";
+    if (pill) {
+      pill.classList.toggle("is-maintenance", maintenance);
+      pill.innerHTML = `<span class="status-dot"></span> ${maintenance ? "Maintenance" : "All Systems Online"}`;
+    }
+    if (banner) {
+      banner.classList.toggle("hidden", !maintenance);
+      if (maintenance && bannerMessage) bannerMessage.textContent = data.message || "Existing key time is paused and will resume automatically when service is restored.";
+    }
+  } catch (error) {
+    console.warn("Public status unavailable", error);
+  }
+}
+
 async function loadCommerceConfig() {
   try {
     const data = await api("/api/commerce/config");
@@ -266,6 +297,23 @@ function getGamePlaceId(game) {
 
 function getGameLoadstring() {
   return `loadstring(game:HttpGet("https://pastebin.com/raw/ehQa2Qj1"))()`;
+}
+
+async function copySiteLoadstring(button = null) {
+  const loadstring = getGameLoadstring();
+  const copied = await copyText(loadstring);
+  if (copied) {
+    if (button) {
+      button.textContent = "Copied ✓";
+      setTimeout(() => { button.textContent = "Get Script"; }, 1600);
+    }
+    showToast("Airesz loadstring copied ✓", true);
+    setMessage("Airesz loadstring copied.", true);
+    return true;
+  }
+  showToast("Clipboard permission was blocked.", false);
+  setMessage("Clipboard permission was blocked.");
+  return false;
 }
 
 const robloxThumbnailCache = new Map();
@@ -566,7 +614,7 @@ async function logoutAllDiscordDevices() {
   }
 }
 
-async function resetHwidFromWebsite() {
+async function resetHwidFromWebsite(button = null) {
   if (!state.discordUser) {
     localStorage.setItem("airesz_pending_hwid_reset", "1");
     showToast("Login with Discord first to reset your HWID.", false);
@@ -574,7 +622,6 @@ async function resetHwidFromWebsite() {
     return;
   }
   if (!confirm("Reset your Discord-linked HWID now? This consumes one available HWID reset and is shared with /resethwid in Discord.")) return;
-  const button = $("#resetHwidBtn");
   if (button) { button.disabled = true; button.textContent = "Resetting…"; }
   try {
     const data = await api("/api/client/discord/reset-hwid-web", { method: "POST", body: {} });
@@ -586,7 +633,7 @@ async function resetHwidFromWebsite() {
     showToast(error?.message || "HWID reset failed.", false);
     setMessage(error?.message || "HWID reset failed.");
   } finally {
-    if (button) { button.disabled = false; button.textContent = "Reset HWID"; }
+    if (button) { button.disabled = false; button.textContent = "↻ Reset HWID"; }
   }
 }
 
@@ -919,15 +966,11 @@ $$(".provider").forEach((button) => button.addEventListener("click", () => {
   updateSelection();
 }));
 
+$("#topGetScriptBtn")?.addEventListener("click", async () => {
+  await copySiteLoadstring($("#topGetScriptBtn"));
+});
 $("#heroGetScriptBtn")?.addEventListener("click", async () => {
-  const copied = await copyText(getGameLoadstring());
-  if (copied) {
-    showToast("Airesz loadstring copied ✓", true);
-    setMessage("Airesz loadstring copied.", true);
-  } else {
-    showToast("Clipboard permission was blocked.", false);
-    setMessage("Clipboard permission was blocked.");
-  }
+  await copySiteLoadstring($("#heroGetScriptBtn"));
 });
 $("#startBtn").addEventListener("click", startRoute);
 $("#buyLifetimeBtn")?.addEventListener("click", () => startProductCheckout("LIFETIME"));
@@ -977,7 +1020,6 @@ $("#discordLoginBtn")?.addEventListener("click", loginWithDiscord);
 $("#topLoginBtn")?.addEventListener("click", () => state.discordUser ? $(".identity-gateway")?.scrollIntoView({ behavior: "smooth" }) : loginWithDiscord());
 $("#discordLogoutBtn")?.addEventListener("click", logoutDiscord);
 $("#discordLogoutAllBtn")?.addEventListener("click", logoutAllDiscordDevices);
-$("#resetHwidBtn")?.addEventListener("click", resetHwidFromWebsite);
 async function startProductCheckout(product = "LIFETIME") {
   const normalized = String(product || "LIFETIME").toUpperCase();
   const discordLinkToken = new URLSearchParams(location.search).get("discord_link") || "";
@@ -996,6 +1038,7 @@ async function startProductCheckout(product = "LIFETIME") {
     location.href = data.url;
   } catch (error) {
     setMessage(error.message);
+    await loadGlobalMaintenanceStatus();
     await loadCommerceConfig();
   } finally { buttons.forEach((button) => { if (button) button.disabled = false; }); }
 }
@@ -1063,10 +1106,14 @@ async function handleStripeReturn() {
     if (location.hash === "#buy-lifetime") {
       setTimeout(() => $("#buyLifetimeBtn")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
     }
+    await loadGlobalMaintenanceStatus();
     await loadCommerceConfig();
     await loadGames();
     await loadProviders();
     await loadMyKeys();
+    // Refresh countdown/state labels without re-fetching, so "Expiring Soon"
+    // changes automatically when an active key crosses the 12-hour threshold.
+    window.setInterval(() => renderMyKeys(), 60 * 1000);
     await handleStripeReturn();
     if (!state.session) await discoverActiveSession();
     if (state.session) {

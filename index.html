@@ -39,7 +39,7 @@
     <div class="dashboard-intro shell">
     <section id="home" class="hero">
       <div class="hero-copy">
-        <div class="pill"><span class="status-dot"></span> All Systems Online</div>
+        <div id="globalMaintenancePill" class="pill"><span class="status-dot"></span> All Systems Online</div>
         <h1>Scripts that feel <span class="gradient-word">premium.</span><br>Access that stays simple.</h1>
         <p>Browse every supported game, grab a free key, or unlock Lifetime and Premium access without making the main script experience complicated.</p>
         <div class="hero-actions"><button id="heroGetScriptBtn" class="primary-button hero-cta" type="button">Get Script <span>→</span></button><a class="secondary-button hero-cta" href="#get-key">Get Key</a><a class="text-button" href="#pricing">View Access Plans</a></div>
@@ -70,10 +70,6 @@
         <div><strong id="discordUsername">Discord User</strong><span>Discord account connected</span></div>
         <button id="discordLogoutBtn" class="secondary-button" type="button">Logout</button>
         <button id="discordLogoutAllBtn" class="secondary-button" type="button">Logout All Devices</button>
-      </div>
-      <div class="account-tools">
-        <button id="resetHwidBtn" class="secondary-button reset-hwid-button" type="button">↻ Reset HWID</button>
-        <small>Requires Discord login. The same reset allowance is shared with <code>/resethwid</code>.</small>
       </div>
     </section>
     </div>
@@ -219,6 +215,8 @@
         <article><span>4</span><strong>Get Your Key</strong><p>Copy the key and enter it into the script.</p></article>
       </div>
     </section>
+
+    <div id="maintenanceBanner" class="maintenance-banner shell hidden"><strong>🔧 Airesz is under maintenance</strong><span id="maintenanceBannerMessage">Existing key time is paused and will resume automatically when service is restored.</span></div>
 
     <section id="status" class="status-strip shell">
       <div><span class="status-dot"></span><strong>System Online</strong><small>Cloudflare API available</small></div>
