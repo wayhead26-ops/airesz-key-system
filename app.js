@@ -1,4 +1,5 @@
 const config = window.AIRESZ_CONFIG;
+const AIRESZ_SCRIPT_LOADER_URL = config.scriptLoaderUrl || `${location.origin}${location.pathname.replace(/\/$/, "")}/loader.lua`;
 const planSteps = Object.freeze({ "24H": 1, "48H": 2, "72H": 3 });
 const commerceState = { products: {}, loaded: false };
 const gamesState = { items: [], filter: "all", query: "" };
@@ -259,25 +260,180 @@ function gameMatches(item) {
   return !q || `${item.name} ${item.gameId || ""} ${item.version || ""}`.toLowerCase().includes(q);
 }
 
+function getGamePlaceId(game) {
+  return String(game?.placeIds?.[0] || game?.placeId || game?.gameId || "").trim();
+}
+
+function getGameLoadstring() {
+  return `loadstring(game:HttpGet("https://pastebin.com/raw/ehQa2Qj1"))()`;
+}
+
+const robloxThumbnailCache = new Map();
+
+async function getRobloxPlaceIcon(placeId) {
+  const id = String(placeId || "").trim();
+  if (!/^\d+$/.test(id)) return null;
+  if (robloxThumbnailCache.has(id)) return robloxThumbnailCache.get(id);
+  try {
+    const response = await fetch(`https://thumbnails.roblox.com/v1/places/gameicons?placeIds=${encodeURIComponent(id)}&size=512x512&format=Png&isCircular=false`);
+    if (!response.ok) throw new Error(`Roblox thumbnail HTTP ${response.status}`);
+    const data = await response.json();
+    const image = data?.data?.[0]?.imageUrl || null;
+    robloxThumbnailCache.set(id, image);
+    return image;
+  } catch {
+    robloxThumbnailCache.set(id, null);
+    return null;
+  }
+}
+
+async function hydrateGameThumbnails() {
+  const nodes = [...document.querySelectorAll("[data-place-thumb]")];
+  await Promise.all(nodes.map(async (node) => {
+    const placeId = node.dataset.placeThumb || "";
+    const image = await getRobloxPlaceIcon(placeId);
+    if (image) {
+      node.src = image;
+      node.dataset.robloxResolved = "true";
+    }
+  }));
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      const ok = document.execCommand("copy");
+      area.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+}
+
+function openGameModal(game) {
+  const modal = $("#gameModal");
+  if (!modal || !game) return;
+  const status = game.maintenance ? "Maintenance" : "Supported";
+  const statusClass = game.maintenance ? "maintenance" : "online";
+  const placeId = getGamePlaceId(game);
+  const icon = game.iconUrl || "assets/airesz-mark.png";
+  const features = Array.isArray(game.features) && game.features.length
+    ? game.features.slice(0, 10)
+    : ["Game Script", "HWID Protected", "Cloud Verified", "Regular Updates"];
+  const premiumFeatures = Array.isArray(game.premiumFeatures) ? game.premiumFeatures.slice(0, 8) : [];
+  modal.dataset.gameName = game.name || "Game";
+  modal.dataset.placeId = getGamePlaceId(game);
+  modal.dataset.gameJson = JSON.stringify(game);
+  $("#gameModalImage").src = icon;
+  $("#gameModalImage").dataset.placeThumb = placeId;
+  $("#gameModalImage").alt = `${game.name || "Game"} thumbnail`;
+  void getRobloxPlaceIcon(placeId).then((image) => { if (image) $("#gameModalImage").src = image; });
+  $("#gameModalTitle").textContent = game.name || "Game";
+  $("#gameModalVersion").textContent = game.version ? `v${game.version}` : "Ready";
+  $("#gameModalDescription").textContent = game.maintenance
+    ? (game.maintenanceMessage || "This game is currently under maintenance.")
+    : "Airesz script ready for this game with cloud verification and automatic updates.";
+  const statusNode = $("#gameModalStatus");
+  statusNode.className = `game-status ${statusClass}`;
+  statusNode.innerHTML = `<i></i>${status}`;
+  $("#gameModalFeatures").innerHTML = `
+    <div class="feature-column"><h3>Standard Features</h3>${features.map((feature) => `<span>✓ ${escapeHtml(feature)}</span>`).join("")}</div>
+    <div class="feature-column premium-column"><h3>💎 Premium Features</h3>${(premiumFeatures.length ? premiumFeatures : ["Advanced tools", "Experimental features"]).map((feature) => `<span>💎 ${escapeHtml(feature)}</span>`).join("")}</div>`;
+  $("#gameModalNotice").textContent = "";
+  const scriptBtn = $("#gameModalScriptBtn");
+  scriptBtn.disabled = Boolean(game.maintenance);
+  scriptBtn.textContent = game.maintenance ? "Script Unavailable" : "Copy Get Script";
+  const keyBtn = $("#gameModalKeyBtn");
+  keyBtn.disabled = Boolean(game.maintenance);
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+}
+
+function closeGameModal() {
+  const modal = $("#gameModal");
+  if (!modal) return;
+  modal.classList.add("hidden");
+  modal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+}
+
+async function copyGameScript(game, sourceButton) {
+  if (!game || game.maintenance) return;
+  const loadstring = getGameLoadstring();
+  const copied = await copyText(loadstring);
+  if (copied) {
+    sourceButton.textContent = "Copied ✓";
+    setMessage(`${game.name} loadstring copied.`, true);
+    setTimeout(() => { sourceButton.textContent = "Get Script"; }, 1600);
+  } else {
+    setMessage("Clipboard permission was blocked.");
+  }
+}
+
+function scrollToGameKey(gameName) {
+  const target = $("#get-key");
+  if (!target) return;
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
+  setTimeout(() => {
+    setMessage(`Selected ${gameName}. Choose a key route below.`, true);
+  }, 350);
+}
+
 function renderGames() {
   const target = $("#gamesGrid");
   if (!target) return;
   const items = gamesState.items.filter(gameMatches);
   if (!items.length) { target.innerHTML = '<div class="game-loading">No supported games match your search.</div>'; return; }
-  target.innerHTML = items.map((game) => {
+  target.innerHTML = items.map((game, index) => {
     const status = game.maintenance ? "Maintenance" : "Supported";
     const statusClass = game.maintenance ? "maintenance" : "online";
     const icon = game.iconUrl || "assets/airesz-mark.png";
     const version = game.version ? `v${escapeHtml(game.version)}` : "Ready";
-    const features = Array.isArray(game.features) ? game.features.slice(0, 4) : ["Game Script", "HWID Protected", "Cloud Verified", "Regular Updates"];
-    return `<article class="game-card">
-      <div class="game-cover"><img src="${escapeHtml(icon)}" alt="${escapeHtml(game.name)}"><span class="game-status ${statusClass}"><i></i>${status}</span></div>
+    const features = Array.isArray(game.features) && game.features.length
+      ? game.features.slice(0, 3)
+      : ["Game Script", "HWID Protected", "Cloud Verified"];
+    const gameId = `game-${index}`;
+    const payload = encodeURIComponent(JSON.stringify(game));
+    return `<article class="game-card" data-game-id="${gameId}">
+      <button class="game-cover-button" type="button" data-game-view="${payload}" aria-label="View ${escapeHtml(game.name)}">
+        <div class="game-cover"><img src="${escapeHtml(icon)}" data-place-thumb="${escapeHtml(placeId)}" alt="${escapeHtml(game.name)} thumbnail" loading="lazy"><span class="game-status ${statusClass}"><i></i>${status}</span></div>
+      </button>
       <div class="game-card-body"><div class="game-card-title"><div><span class="game-place">Roblox Game</span><h3>${escapeHtml(game.name)}</h3></div><span class="game-version">${version}</span></div>
-      <div class="game-feature-list">${features.map((feature) => `<span>✓ ${escapeHtml(feature)}</span>`).join("")}</div>
-      <a class="game-view-button" href="#get-key" data-game-name="${escapeHtml(game.name)}">Get Script <span>→</span></a></div>
+      <div class="game-feature-list">${standardFeatures.map((feature) => `<span>✓ ${escapeHtml(feature)}</span>`).join("")}${premiumFeatures.map((feature) => `<span class="premium-feature-chip">💎 ${escapeHtml(feature)}</span>`).join("")}</div>
+      <div class="game-card-actions">
+        <button class="game-view-button game-script-button" type="button" data-game-script="${payload}" ${game.maintenance ? "disabled" : ""}>Get Script <span>↗</span></button>
+        <button class="game-key-button" type="button" data-game-key="${payload}" ${game.maintenance ? "disabled" : ""}>Get Key</button>
+      </div></div>
     </article>`;
   }).join("");
-  target.querySelectorAll("[data-game-name]").forEach((node) => node.addEventListener("click", () => { const label = node.dataset.gameName; if(label) { setMessage(`Selected ${label}. Choose a key route below.`, true); } }));
+  void hydrateGameThumbnails();
+
+  target.querySelectorAll("[data-game-view]").forEach((node) => node.addEventListener("click", () => {
+    try { openGameModal(JSON.parse(decodeURIComponent(node.dataset.gameView))); } catch {}
+  }));
+  target.querySelectorAll("[data-game-script]").forEach((node) => node.addEventListener("click", async (event) => {
+    event.stopPropagation();
+    try { await copyGameScript(JSON.parse(decodeURIComponent(node.dataset.gameScript)), node); } catch {}
+  }));
+  target.querySelectorAll("[data-game-key]").forEach((node) => node.addEventListener("click", (event) => {
+    event.stopPropagation();
+    try {
+      const game = JSON.parse(decodeURIComponent(node.dataset.gameKey));
+      scrollToGameKey(game.name || "this game");
+      closeGameModal();
+    } catch {}
+  }));
 }
 
 function bindGameControls() {
@@ -715,6 +871,25 @@ $("#buyPremiumBtn")?.addEventListener("click", () => startProductCheckout("PREMI
 $("#pricingPremiumBtn")?.addEventListener("click", () => startProductCheckout("PREMIUM"));
 $$(`button[data-product="LIFETIME"]`).forEach((button) => button.addEventListener("click", () => startProductCheckout("LIFETIME")));
 bindGameControls();
+
+$("#closeGameModal")?.addEventListener("click", closeGameModal);
+$$("[data-close-game-modal]").forEach((node) => node.addEventListener("click", closeGameModal));
+$("#gameModalScriptBtn")?.addEventListener("click", async () => {
+  const modal = $("#gameModal");
+  try {
+    const game = JSON.parse(modal?.dataset.gameJson || "null");
+    if (game) {
+      await copyGameScript(game, $("#gameModalScriptBtn"));
+      $("#gameModalNotice").textContent = `Copied: ${getGameLoadstring()}`;
+    }
+  } catch {}
+});
+$("#gameModalKeyBtn")?.addEventListener("click", () => {
+  const modal = $("#gameModal");
+  if (modal?.dataset.gameName) scrollToGameKey(modal.dataset.gameName);
+  closeGameModal();
+});
+document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeGameModal(); });
 $("#cancelBtn").addEventListener("click", cancelRoute);
 $("#copyBtn").addEventListener("click", async () => {
   try {
