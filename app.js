@@ -11,7 +11,12 @@ const state = {
   historyKeys: [],
   historyTab: "active",
   discordToken: localStorage.getItem("airesz_discord_session") || "",
-  discordUser: null
+  discordUser: null,
+  games: [],
+  gameFilter: "all",
+  gameSearch: "",
+  gameSort: "name",
+  commerce: null
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -38,6 +43,8 @@ function saveIssuedKey(keyData) {
     prefix: keyData.prefix || keyData.key.slice(0, 20),
     plan: keyData.plan || "",
     provider: keyData.provider || "",
+    userId: keyData.userId || null,
+    hwidResetRemaining: keyData.hwidResetRemaining == null ? null : Number(keyData.hwidResetRemaining),
     issuedAt: Number(keyData.issuedAt || Math.floor(Date.now() / 1000)),
     expiresAt: keyData.expiresAt == null ? null : Number(keyData.expiresAt)
   };
@@ -75,31 +82,138 @@ function maskKey(key) {
   return `${text.slice(0, 12)}…${text.slice(-4)}`;
 }
 
+async function loadGames() {
+  try {
+    const data = await api("/api/games");
+    state.games = Array.isArray(data.games) ? data.games : [];
+  } catch {
+    state.games = [];
+  }
+  renderGames();
+}
+
+function gameStatus(game) {
+  if (game.killSwitch) return ["Offline", "offline"];
+  if (game.maintenance) return ["Maintenance", "maintenance"];
+  return ["Online", "online"];
+}
+
+function gameIconUrl(game) {
+  const placeId = String(game.placeId || "");
+  return /^\d+$/.test(placeId)
+    ? `https://thumbnails.roblox.com/v1/places/gameicons?placeIds=${encodeURIComponent(placeId)}&returnPolicy=PlaceHolder&size=420x420&format=Png&isCircular=false`
+    : "";
+}
+
+function gameCard(game) {
+  const [status, cls] = gameStatus(game);
+  const iconApi = gameIconUrl(game);
+  const fallback = escapeHtml((game.name || "A").slice(0, 1).toUpperCase());
+  const updated = game.updatedAt ? new Date(Number(game.updatedAt) * 1000).toLocaleDateString() : "—";
+  const placeId = String(game.placeId || "");
+  const robloxUrl = /^\d+$/.test(placeId) ? `https://www.roblox.com/games/${placeId}` : "#get-key";
+  return `<article class="game-card ${cls}" data-name="${escapeHtml(game.name || "")}" data-status="${cls}">
+    <div class="game-art"><div class="game-fallback">${fallback}</div><img loading="lazy" alt="${escapeHtml(game.name || "Roblox game")}" data-game-icon="${escapeHtml(iconApi)}"><div class="game-status ${cls}"><span></span>${status}</div></div>
+    <div class="game-card-body"><div class="game-card-title"><div><h3>${escapeHtml(game.name || "Untitled Game")}</h3><span>${game.latestVersion ? `v${escapeHtml(game.latestVersion)}` : "Managed game"}</span></div><span class="game-updated">${updated}</span></div>
+      <p>${game.maintenanceMessage ? escapeHtml(game.maintenanceMessage) : "Airesz script access is available for this supported game."}</p>
+      <div class="game-card-actions"><a class="primary-button game-get-btn" href="#get-key">Get Access</a><a class="secondary-button game-view-btn" href="${robloxUrl}" target="_blank" rel="noopener noreferrer">View Game</a></div>
+    </div>
+  </article>`;
+}
+
+function renderGames() {
+  const target = $("#gamesGrid");
+  if (!target) return;
+  let games = [...state.games];
+  if (state.gameFilter === "online") games = games.filter(g => !g.maintenance && !g.killSwitch);
+  if (state.gameFilter === "maintenance") games = games.filter(g => g.maintenance || g.killSwitch);
+  const query = state.gameSearch.trim().toLowerCase();
+  if (query) games = games.filter(g => `${g.name || ""} ${g.gameId || ""} ${g.placeId || ""}`.toLowerCase().includes(query));
+  games.sort((a,b) => state.gameSort === "updated"
+    ? Number(b.updatedAt||0) - Number(a.updatedAt||0)
+    : state.gameSort === "status"
+      ? String(gameStatus(a)[0]).localeCompare(String(gameStatus(b)[0])) || String(a.name||"").localeCompare(String(b.name||""))
+      : String(a.name||"").localeCompare(String(b.name||""))
+  );
+  if (!games.length) { target.innerHTML = '<div class="loading-panel">No games match your search.</div>'; return; }
+  target.innerHTML = games.map(gameCard).join("");
+  target.querySelectorAll("img[data-game-icon]").forEach((img) => {
+    const source = img.dataset.gameIcon;
+    if (!source) return;
+    fetch(source).then(r => r.ok ? r.json() : null).then(data => {
+      const url = data?.data?.[0]?.imageUrl;
+      if (url) { img.src = url; img.classList.add("loaded"); img.previousElementSibling.style.opacity = "0"; }
+    }).catch(() => {});
+  });
+  target.querySelectorAll(".game-get-btn").forEach((btn) => btn.addEventListener("click", () => setTimeout(() => $("#get-key")?.scrollIntoView({behavior:"smooth",block:"start"}), 0)));
+}
+
+async function loadCommerceConfig() {
+  try {
+    const data = await api("/api/commerce/config");
+    state.commerce = data.products || null;
+    const premium = state.commerce?.premium;
+    const btn = $("#buyPremiumBtn");
+    const price = $("#premiumPrice");
+    if (premium?.available) {
+      if (price) price.textContent = `$${(Number(premium.amountCents||0)/100).toFixed(2)} ${String(premium.currency||"USD").toUpperCase()}`;
+      if (btn) { btn.disabled = false; btn.textContent = "💎 Get Premium"; btn.onclick = startPremiumCheckout; }
+    } else {
+      if (price) price.textContent = "Soon";
+      if (btn) { btn.disabled = true; btn.textContent = "Premium Coming Soon"; }
+    }
+  } catch {}
+}
+
+async function startPremiumCheckout() {
+  if (!state.commerce?.premium?.available) { setMessage("Premium is not enabled yet."); return; }
+  if (!state.discordUser) { localStorage.setItem("airesz_pending_premium_checkout", "1"); loginWithDiscord(); return; }
+  try {
+    const data = await api("/api/stripe/checkout", { method: "POST", body: { clientToken: state.clientToken, product: "PREMIUM" } });
+    if (!data.url) throw new Error("Premium checkout URL was not returned.");
+    location.href = data.url;
+  } catch (error) { setMessage(error.message); }
+}
+
+function isHwidResetEligible(item) {
+  const state = String(item?.state || "").toLowerCase();
+  if (!item?.id || state === "deleted" || state === "revoked" || state === "expired" || state === "hwid_mismatch") return false;
+  if (String(item.source || "") === "free" && ["24H", "48H", "72H"].includes(String(item.plan || ""))) {
+    return Number(item.hwidResetRemaining) > 0;
+  }
+  return String(item.plan || "") === "LIFETIME";
+}
+
 function renderKeyHistoryCard(item) {
   const [label, cls] = keyStateLabel(item);
   const keyText = item.key || maskKey(item.prefix);
   const canCopy = Boolean(item.key);
-  const plan = String(item.plan || "").toUpperCase();
-  const source = String(item.source || "").toLowerCase();
-  const freeEligible = source === "free" && ["24H", "48H", "72H"].includes(plan) && Number(item.hwidResetRemaining) > 0;
-  const lifetimeEligible = plan === "LIFETIME" && item.state === "active";
-  const canReset = item.state !== "deleted" && item.state !== "hwid_mismatch" && item.status === "active" && Boolean(item.id) && (freeEligible || lifetimeEligible);
-  const resetMeta = (freeEligible || lifetimeEligible)
-    ? `<span>HWID Reset: ${item.hwidResetRemaining == null ? "Available" : `${Number(item.hwidResetRemaining)} remaining`}</span>`
-    : "";
+  const resetEligible = isHwidResetEligible(item);
+  const copyButton = canCopy ? `<button class="key-history-copy" type="button" data-key="${encodeURIComponent(item.key)}">Copy Key</button>` : '';
+  const resetButton = resetEligible
+    ? `<button class="key-history-reset-hwid" type="button" data-key-id="${escapeHtml(item.id || '')}">Reset HWID</button>`
+    : '';
   const action = item.state === "deleted"
     ? '<span class="key-history-note">This key was deleted and is no longer active.</span>'
     : item.state === "hwid_mismatch"
     ? '<span class="key-history-note">Get a new key to continue.</span>'
-    : canCopy
-      ? `<button class="key-history-copy" type="button" data-key="${encodeURIComponent(item.key)}">Copy Key</button>${canReset ? `<button class="key-history-reset-hwid" type="button" data-key-id="${escapeHtml(item.id)}">Reset HWID</button>` : ""}`
+    : (copyButton || resetButton)
+      ? `${copyButton}${resetButton}`
       : '<span class="key-history-note">Enter the key below to recover.</span>';
+
   const keyTitle = item.source === "giveaway" ? "Giveaway Key" : item.plan ? `${item.plan} Key` : "Airesz Key";
-  const userId = item.userId ? escapeHtml(item.userId) : "Not linked yet";
+  const isFreeResetPlan = item.source === "free" && ["24H", "48H", "72H"].includes(String(item.plan || ""));
+  const resetMeta = isFreeResetPlan
+    ? `<span>HWID Reset: ${Number(item.hwidResetRemaining) > 0 ? `${Number(item.hwidResetRemaining)} remaining` : "0 remaining"}</span>`
+    : String(item.plan || "") === "LIFETIME"
+      ? '<span>HWID Reset: Available after Discord verification</span>'
+      : '';
+
   return `<article class="key-history-card ${cls} ${item.source === "giveaway" ? "giveaway" : ""}">
     <div class="key-history-top"><div><span class="key-state-pill ${cls}">${label}</span><strong>${keyTitle}</strong></div><span class="key-history-time">${item.expiresAt == null ? "Lifetime" : remainingText(item.expiresAt)}</span></div>
     <code>${canCopy ? escapeHtml(item.key) : escapeHtml(keyText || "Unknown key")}</code>
-    <div class="key-history-meta"><span>Roblox User ID: ${userId}</span><span>Issued ${item.issuedAt ? new Date(Number(item.issuedAt) * 1000).toLocaleString() : "—"}</span><span>${item.expiresAt == null ? "No expiry" : `Expires ${new Date(Number(item.expiresAt) * 1000).toLocaleString()}`}</span>${resetMeta}</div>
+    <div class="key-history-meta"><span>Issued ${item.issuedAt ? new Date(Number(item.issuedAt) * 1000).toLocaleString() : "—"}</span><span>${item.expiresAt == null ? "No expiry" : `Expires ${new Date(Number(item.expiresAt) * 1000).toLocaleString()}`}</span></div>
+    <div class="key-history-meta"><span>User ID: ${item.userId ? escapeHtml(String(item.userId)) : "Not linked yet"}</span>${resetMeta}</div>
     <div class="key-history-actions">${action}</div>
   </article>`;
 }
@@ -114,24 +228,25 @@ function bindKeyCopyButtons(root = document) {
       setMessage("Clipboard permission was blocked.");
     }
   }));
-}
 
-function bindKeyResetButtons(root = document) {
   root.querySelectorAll(".key-history-reset-hwid").forEach(button => button.addEventListener("click", async () => {
-    const keyId = String(button.dataset.keyId || "").trim();
-    if (!keyId) return;
     if (!state.discordUser) {
-      localStorage.setItem("airesz_pending_hwid_reset", keyId);
-      setMessage("Login with Discord before resetting your HWID.", true);
+      setMessage("Login with Discord to verify ownership before resetting your HWID.");
       loginWithDiscord();
       return;
     }
-    if (!confirm("Reset the HWID for this key? Your current device binding will be cleared.")) return;
+    const keyId = String(button.dataset.keyId || "").trim();
+    if (!keyId) return;
     button.disabled = true;
-    button.textContent = "Resetting…";
+    button.textContent = "Resetting...";
     try {
-      const data = await api("/api/client/discord/resethwid", { method: "POST", body: { keyId } });
-      setMessage(`HWID reset successful. ${data.resetsRemaining == null ? "Reset completed." : `Resets remaining: ${data.resetsRemaining}`}`, true);
+      const headers = state.discordToken ? { Authorization: `Bearer ${state.discordToken}` } : {};
+      const data = await api("/api/client/discord/resethwid", {
+        method: "POST",
+        headers,
+        body: { clientToken: state.clientToken, keyId }
+      });
+      setMessage(data.ok ? "HWID reset successful." : "HWID reset failed.");
       await loadMyKeys();
     } catch (error) {
       setMessage(error.message || "HWID reset failed.");
@@ -189,7 +304,6 @@ function renderMyKeys() {
     ? selectedItems.map(renderKeyHistoryCard).join("")
     : `<div class="empty-state">${emptyLabel}</div>`;
   bindKeyCopyButtons(target);
-  bindKeyResetButtons(target);
 }
 
 async function loadMyKeys() {
@@ -695,7 +809,10 @@ $("#discordLoginBtn")?.addEventListener("click", loginWithDiscord);
 $("#topLoginBtn")?.addEventListener("click", () => state.discordUser ? $(".identity-gateway")?.scrollIntoView({ behavior: "smooth" }) : loginWithDiscord());
 $("#discordLogoutBtn")?.addEventListener("click", logoutDiscord);
 $("#discordLogoutAllBtn")?.addEventListener("click", logoutAllDiscordDevices);
-$("#buyLifetimeBtn")?.addEventListener("click", startLifetimeCheckout);
+$("#heroLifetimeBtn")?.addEventListener("click", () => $("#buyLifetimeBtn")?.click());
+$("#gameSearch")?.addEventListener("input", (event) => { state.gameSearch = event.target.value; renderGames(); });
+$("#gameSort")?.addEventListener("change", (event) => { state.gameSort = event.target.value; renderGames(); });
+$$(".game-filter").forEach((button) => button.addEventListener("click", () => { state.gameFilter = button.dataset.gameFilter || "all"; $$(".game-filter").forEach(b => b.classList.toggle("active", b === button)); renderGames(); }));
 async function startLifetimeCheckout() {
   const params = new URLSearchParams(location.search);
   const discordLinkToken = params.get("discord_link") || "";
@@ -729,6 +846,8 @@ async function startLifetimeCheckout() {
     }
   }
 }
+
+$("#buyLifetimeBtn")?.addEventListener("click", startLifetimeCheckout);
 
 async function handleStripeReturn() {
   const params = new URLSearchParams(location.search);
@@ -781,16 +900,17 @@ async function handleStripeReturn() {
         await startLifetimeCheckout();
         return;
       }
-      if (localStorage.getItem("airesz_pending_hwid_reset")) {
-        localStorage.removeItem("airesz_pending_hwid_reset");
-        await loadMyKeys();
-        setTimeout(() => document.querySelector("#my-keys")?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+      if (localStorage.getItem("airesz_pending_premium_checkout") === "1") {
+        localStorage.removeItem("airesz_pending_premium_checkout");
+        await startPremiumCheckout();
+        return;
       }
     }
     if (location.hash === "#buy-lifetime") {
       setTimeout(() => $("#buyLifetimeBtn")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
     }
     await loadProviders();
+    await Promise.allSettled([loadGames(), loadCommerceConfig()]);
     await loadMyKeys();
     await handleStripeReturn();
     if (!state.session) await discoverActiveSession();

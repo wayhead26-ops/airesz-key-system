@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#080511">
-  <meta name="description" content="Airesz free script key system with Linkvertise, Work.ink, and LootLabs checkpoints.">
-  <title>Airesz Free Script Key System</title>
+  <meta name="description" content="Airesz Roblox script hub with game support, Free Keys, Premium, Lifetime access, Discord linking, and secure HWID-protected key history.">
+  <title>Airesz — Roblox Script Hub</title>
   <link rel="icon" href="assets/airesz-mark.png">
-  <link rel="stylesheet" href="styles.css?v=3.13.1">
-  <link rel="stylesheet" href="discord-login.css?v=3.13.1">
-  <link rel="stylesheet" href="purple-dashboard.css?v=3.14.0">
+  <link rel="stylesheet" href="styles.css?v=4.0.0">
+  <link rel="stylesheet" href="discord-login.css?v=4.0.0">
+  <link rel="stylesheet" href="purple-dashboard.css?v=4.0.0">
 </head>
 <body>
   <div class="page-glow glow-a"></div>
@@ -19,174 +19,131 @@
   <header class="topbar shell">
     <a class="brand" href="#home" aria-label="Airesz home">
       <img src="assets/airesz-mark.png" alt="Airesz logo">
-      <span><strong>AIRESZ</strong><small>FREE KEY SYSTEM</small></span>
+      <span><strong>AIRESZ</strong><small>ROBLOX SCRIPT HUB</small></span>
     </a>
     <nav aria-label="Main navigation">
       <a href="#home">Home</a>
+      <a href="#games">Games</a>
+      <a href="#pricing">Premium</a>
       <a href="#get-key">Get Key</a>
       <a href="#my-keys">My Keys</a>
-      <a href="#status">Status</a>
     </nav>
     <div class="topbar-actions">
       <button id="topLoginBtn" class="discord-login-mini" type="button">Login with Discord</button>
-      <a id="supportLink" class="support-button" target="_blank" rel="noopener noreferrer"><span class="status-dot"></span> Discord Support</a>
+      <a id="supportLink" class="support-button" target="_blank" rel="noopener noreferrer"><span class="status-dot"></span> Discord</a>
     </div>
   </header>
 
   <main>
-    <div class="dashboard-intro shell">
-    <section id="home" class="hero">
+    <section id="home" class="airflow-hero shell">
       <div class="hero-copy">
-        <div class="pill"><span class="status-dot"></span> All Systems Online</div>
-        <h1>Secure Access.<br>Built for <span class="gradient-word">Airesz.</span></h1>
-        <p>Free temporary keys through verified checkpoints, or permanent Lifetime access connected securely to Discord.</p>
-        <div class="hero-badges">
-          <article><span>🛡</span><div><strong>HWID Protected</strong><small>One key for one device</small></div></article>
-          <article><span>⚡</span><div><strong>Instant Access</strong><small>Generated after your checkpoints</small></div></article>
-          <article><span>☁</span><div><strong>Cloud Verified</strong><small>Cloudflare Worker + D1</small></div></article>
+        <div class="pill"><span class="status-dot"></span> Airesz is online</div>
+        <h1>One hub.<br><span class="gradient-word">Every game you need.</span></h1>
+        <p>Browse supported Roblox games, choose Free, Premium, or Lifetime access, then keep everything tied to your Discord and key history.</p>
+        <div class="hero-actions">
+          <a class="primary-button" href="#games">🎮 View Games</a>
+          <a class="secondary-button" href="#get-key">🔑 Get Free Key</a>
+          <button id="heroLifetimeBtn" class="secondary-button" type="button">💎 Get Lifetime</button>
+        </div>
+        <div class="hero-stats">
+          <div><strong id="heroGameCount">—</strong><span>Supported games</span></div>
+          <div><strong>24/7</strong><span>Key verification</span></div>
+          <div><strong>1 device</strong><span>Default HWID protection</span></div>
         </div>
       </div>
-      <div class="hero-mark" aria-hidden="true">
-        <div class="mark-ring ring-one"></div>
-        <div class="mark-ring ring-two"></div>
-        <img src="assets/airesz-mark.png" alt="">
+      <div class="hero-panel">
+        <div class="hero-panel-top"><span>AIRESZ HUB</span><span class="live-dot">LIVE</span></div>
+        <div class="hero-neon-logo"><img src="assets/airesz-mark.png" alt="Airesz"></div>
+        <div class="hero-panel-copy"><strong>Smart Game Support</strong><span>Fast access, clean key history, Discord-linked recovery.</span></div>
+        <div class="hero-panel-tags"><span>Free Keys</span><span>Premium</span><span>Lifetime</span></div>
       </div>
     </section>
 
-    <section class="identity-gateway" aria-labelledby="identityTitle">
-      <div class="identity-copy">
-        <span class="identity-icon">☁</span>
-        <div><span class="section-label">YOUR ACCOUNT</span><h2 id="identityTitle">Connect your Discord</h2><p id="identityDescription">Guest keys stay in this browser. Discord Login keeps linked key history available across your devices.</p></div>
+    <section id="games" class="hub-section shell">
+      <div class="section-head">
+        <div><span class="section-label">GAME LIST</span><h2>Supported Roblox games</h2><p>Browse every managed game, see its live status, version, and jump straight to the access flow.</p></div>
+        <div class="game-tools">
+          <label class="search-box"><span>⌕</span><input id="gameSearch" type="search" placeholder="Search games..." autocomplete="off"></label>
+          <select id="gameSort" class="game-sort" aria-label="Sort games"><option value="name">Name</option><option value="updated">Recently updated</option><option value="status">Status</option></select>
+        </div>
       </div>
-      <div id="identityGuest" class="identity-actions">
-        <span class="guest-badge">Guest Mode Active</span>
-        <button id="discordLoginBtn" class="discord-login-button" type="button"><span>◉</span> Login with Discord</button>
+      <div class="game-filter-row" role="tablist" aria-label="Game filters">
+        <button class="game-filter active" type="button" data-game-filter="all">All</button>
+        <button class="game-filter" type="button" data-game-filter="online">Online</button>
+        <button class="game-filter" type="button" data-game-filter="maintenance">Maintenance</button>
       </div>
-      <div id="identityUser" class="identity-user hidden">
-        <img id="discordAvatar" alt="Discord avatar">
-        <div><strong id="discordUsername">Discord User</strong><span>Discord account connected</span></div>
-        <button id="discordLogoutBtn" class="secondary-button" type="button">Logout</button>
-        <button id="discordLogoutAllBtn" class="secondary-button" type="button">Logout All Devices</button>
+      <div id="gamesGrid" class="games-grid"><div class="loading-panel">Loading supported games…</div></div>
+    </section>
+
+    <section id="pricing" class="hub-section shell">
+      <div class="section-head compact"><div><span class="section-label">ACCESS</span><h2>Choose your access</h2><p>Start free, go Premium when available, or unlock Lifetime access once.</p></div></div>
+      <div class="pricing-grid">
+        <article class="price-card free-plan">
+          <div class="price-badge">FREE</div><h3>Free Key</h3><div class="price-value">$0</div><p>Checkpoint-based access for short sessions.</p>
+          <ul><li>24H / 48H / 72H plans</li><li>Provider checkpoints</li><li>HWID protection</li><li>Key History</li></ul>
+          <a class="secondary-button wide" href="#get-key">Get Free Key</a>
+        </article>
+        <article class="price-card premium-plan" id="premiumCard">
+          <div class="price-badge gold">PREMIUM</div><h3>Premium Access</h3><div class="price-value" id="premiumPrice">—</div><p id="premiumDescription">Priority access and premium features when enabled.</p>
+          <ul><li>Premium feature access</li><li>Discord-linked account</li><li>Priority support</li><li>Designed for every supported game</li></ul>
+          <button id="buyPremiumBtn" class="secondary-button wide" type="button" disabled>Premium Coming Soon</button>
+        </article>
+        <article class="price-card lifetime-plan">
+          <div class="price-badge purple">BEST VALUE</div><h3>Lifetime</h3><div class="price-value">$5 <small>USD</small></div><p>Permanent access connected securely to your Discord account.</p>
+          <ul><li>Never expires</li><li>Discord-linked recovery</li><li>HWID reset support</li><li>Fastest access path</li></ul>
+          <button id="buyLifetimeBtn" class="primary-button wide" type="button">💎 Buy Lifetime · $5</button>
+        </article>
       </div>
     </section>
-    </div>
 
-    <section id="get-key" class="key-builder shell">
+    <section id="discord" class="hub-section shell">
+      <div class="discord-panel">
+        <div class="identity-copy"><span class="identity-icon">◉</span><div><span class="section-label">DISCORD</span><h2 id="identityTitle">Connect your Discord</h2><p id="identityDescription">Guest keys stay in this browser. Discord Login keeps linked key history available across devices.</p></div></div>
+        <div id="identityGuest" class="identity-actions"><span class="guest-badge">Guest Mode Active</span><button id="discordLoginBtn" class="discord-login-button" type="button"><span>◉</span> Login with Discord</button></div>
+        <div id="identityUser" class="identity-user hidden"><img id="discordAvatar" alt="Discord avatar"><div><strong id="discordUsername">Discord User</strong><span>Discord account connected</span></div><button id="discordLogoutBtn" class="secondary-button" type="button">Logout</button><button id="discordLogoutAllBtn" class="secondary-button" type="button">Logout All Devices</button></div>
+      </div>
+    </section>
+
+    <section id="get-key" class="hub-section shell key-flow-section">
+      <div class="section-head compact"><div><span class="section-label">GET KEY</span><h2>Free access, clean flow</h2><p>Pick a duration and provider, complete the checkpoints, then your key lands in Key History.</p></div></div>
       <article class="builder-card">
-        <div class="card-heading">
-          <span class="heading-icon">♛</span>
-          <div><h2>Choose Your Access Plan</h2><p>Select how long you need access.</p></div>
-        </div>
-
+        <div class="card-heading"><span class="heading-icon">♛</span><div><h2>Choose Your Access Plan</h2><p>Select how long you need access.</p></div></div>
         <div class="plans" role="group" aria-label="Access duration">
-          <button class="plan active" data-plan="24H" type="button">
-            <span class="plan-check">✓</span><span class="free-badge">FREE</span><span class="plan-icon">◷</span><strong>24 Hours</strong><small>1 checkpoint</small>
-          </button>
-          <button class="plan" data-plan="48H" type="button">
-            <span class="plan-check">✓</span><span class="free-badge">FREE</span><span class="plan-icon">◷</span><strong>48 Hours</strong><small>2 checkpoints</small>
-          </button>
-          <button class="plan" data-plan="72H" type="button">
-            <span class="plan-check">✓</span><span class="free-badge">FREE</span><span class="plan-icon">◷</span><strong>72 Hours</strong><small>3 checkpoints</small>
-          </button>
+          <button class="plan active" data-plan="24H" type="button"><span class="plan-check">✓</span><span class="free-badge">FREE</span><span class="plan-icon">◷</span><strong>24 Hours</strong><small>1 checkpoint</small></button>
+          <button class="plan" data-plan="48H" type="button"><span class="plan-check">✓</span><span class="free-badge">FREE</span><span class="plan-icon">◷</span><strong>48 Hours</strong><small>2 checkpoints</small></button>
+          <button class="plan" data-plan="72H" type="button"><span class="plan-check">✓</span><span class="free-badge">FREE</span><span class="plan-icon">◷</span><strong>72 Hours</strong><small>3 checkpoints</small></button>
         </div>
-
-        <div class="card-heading provider-heading">
-          <span class="heading-icon">🔗</span>
-          <div><h2>Select a Provider</h2><p>The same provider will be used for every checkpoint.</p></div>
-        </div>
-
+        <div class="card-heading provider-heading"><span class="heading-icon">🔗</span><div><h2>Select a Provider</h2><p>The same provider will be used for every checkpoint.</p></div></div>
         <div class="providers" role="group" aria-label="Checkpoint provider">
-          <button class="provider active" data-provider="linkvertise" type="button">
-            <span class="provider-logo lv">L</span><span><strong>Linkvertise</strong><small>Popular route</small></span><i></i>
-          </button>
-          <button class="provider" data-provider="workink" type="button">
-            <span class="provider-logo wi">W</span><span><strong>Work.ink</strong><small>Alternative route</small></span><i></i>
-          </button>
-          <button class="provider" data-provider="lootlabs" type="button">
-            <span class="provider-logo ll">LL</span><span><strong>LootLabs</strong><small>Postback verified</small></span><i></i>
-          </button>
+          <button class="provider active" data-provider="linkvertise" type="button"><span class="provider-logo lv">L</span><span><strong>Linkvertise</strong><small>Popular route</small></span><i></i></button>
+          <button class="provider" data-provider="workink" type="button"><span class="provider-logo wi">W</span><span><strong>Work.ink</strong><small>Alternative route</small></span><i></i></button>
+          <button class="provider" data-provider="lootlabs" type="button"><span class="provider-logo ll">LL</span><span><strong>LootLabs</strong><small>Postback verified</small></span><i></i></button>
         </div>
-
-        <div class="progress-section">
-          <div class="progress-title"><div><span class="heading-icon small">◎</span><strong>Checkpoint Progress</strong></div><span id="progressText">Progress 0/1</span></div>
-          <div class="progress-track"><span id="progressBar"></span></div>
-          <div id="steps" class="steps"><div class="empty-state">Press Start Checkpoint to begin your route.</div></div>
-        </div>
-
-        <div class="builder-actions">
-          <button id="startBtn" class="primary-button" type="button"><span>▶</span> Start Checkpoint</button>
-          <button id="cancelBtn" class="danger-button hidden" type="button"><span>×</span> Cancel Session</button>
-          <span id="routeState" class="route-state">Ready</span>
-        </div>
+        <div class="progress-section"><div class="progress-title"><div><span class="heading-icon small">◎</span><strong>Checkpoint Progress</strong></div><span id="progressText">Progress 0/1</span></div><div class="progress-track"><span id="progressBar"></span></div><div id="steps" class="steps"><div class="empty-state">Press Start Checkpoint to begin your route.</div></div></div>
+        <div class="builder-actions"><button id="startBtn" class="primary-button" type="button"><span>▶</span> Start Checkpoint</button><button id="cancelBtn" class="danger-button hidden" type="button"><span>×</span> Cancel Session</button><span id="routeState" class="route-state">Ready</span></div>
         <p id="message" class="message" aria-live="polite"></p>
-
-        <div id="keyBox" class="key-box hidden">
-          <div><span>YOUR ACCESS KEY</span><small id="expiryText"></small></div>
-          <div class="key-row"><code id="keyOutput"></code><button id="copyBtn" type="button">Copy</button></div>
-        </div>
+        <div id="keyBox" class="key-box hidden"><div><span>YOUR ACCESS KEY</span><small id="expiryText"></small></div><div class="key-row"><code id="keyOutput"></code><button id="copyBtn" type="button">Copy</button></div></div>
       </article>
-
-      <aside class="info-card">
-        <div class="lifetime-kicker"><span>♛</span> PREMIUM ACCESS</div>
-        <div class="mini-brand"><img src="assets/airesz-mark.png" alt=""><div><strong>LIFETIME ACCESS</strong><span>ONE-TIME PURCHASE</span></div></div>
-        <h2 class="lifetime-price">$5 <small>USD</small></h2>
-        <p>Permanent access connected to your Discord account with secure recovery.</p>
-        <div class="route-summary">
-          <div><span>Access</span><strong>Never expires</strong></div>
-          <div><span>Recovery</span><strong>Discord linked</strong></div>
-          <div><span>Device Limit</span><strong>1 device</strong></div>
-        </div>
-        <div class="manual-sale">
-          <span>✓</span><div><strong>Instant after payment</strong><p>Delivered securely after Stripe confirms your purchase.</p></div>
-        </div>
-        <div class="lifetime-actions">
-          <button id="buyLifetimeBtn" class="primary-button lifetime-buy-button" type="button">💎 Buy Lifetime · $5</button>
-          <a id="manualSupportLink" class="secondary-button" target="_blank" rel="noopener noreferrer">Contact Admin</a>
-        </div>
-      </aside>
     </section>
 
-    <section id="my-keys" class="my-keys shell">
-      <div class="section-label">MY KEYS</div>
-      <div class="my-keys-heading"><div><h2>Your Key History</h2><p id="keyHistoryDescription">Guest history belongs to this browser. Login with Discord to access linked keys across devices.</p></div><button id="refreshMyKeysBtn" class="secondary-button refresh-my-keys" type="button">↻ Refresh</button></div>
-      <div class="key-history-tabs" role="tablist" aria-label="Key history status">
-        <button class="key-history-tab active" data-history-tab="active" type="button" role="tab" aria-selected="true">Active <span id="activeKeyCount">0</span></button>
-        <button class="key-history-tab" data-history-tab="expired" type="button" role="tab" aria-selected="false">Expired <span id="expiredKeyCount">0</span></button>
-        <button class="key-history-tab" data-history-tab="deleted" type="button" role="tab" aria-selected="false">Deleted <span id="deletedKeyCount">0</span></button>
-      </div>
+    <section id="my-keys" class="hub-section shell">
+      <div class="section-head compact"><div><span class="section-label">MY KEYS</span><h2>Your Key History</h2><p id="keyHistoryDescription">Guest history belongs to this browser. Login with Discord to access linked keys across devices.</p></div><button id="refreshMyKeysBtn" class="secondary-button" type="button">↻ Refresh</button></div>
+      <div class="key-history-tabs" role="tablist" aria-label="Key history status"><button class="key-history-tab active" data-history-tab="active" type="button" role="tab" aria-selected="true">Active <span id="activeKeyCount">0</span></button><button class="key-history-tab" data-history-tab="expired" type="button" role="tab" aria-selected="false">Expired <span id="expiredKeyCount">0</span></button><button class="key-history-tab" data-history-tab="deleted" type="button" role="tab" aria-selected="false">Deleted <span id="deletedKeyCount">0</span></button></div>
       <div id="myKeysList" class="my-keys-list"><div class="empty-state">Loading key history...</div></div>
-      <details class="recover-key-card">
-        <summary><span>Recover an older key</span><span class="recover-chevron">▸</span></summary>
-        <div class="recover-key-body">
-          <p>After a phone/browser reset, enter a key you already generated. We will restore it to this device and show its current status.</p>
-          <div class="recover-row"><input id="recoverKeyInput" type="text" autocomplete="off" spellcheck="false" placeholder="AIRESZ-72H-XXXX-XXXX"><button id="recoverKeyBtn" class="primary-button" type="button">Recover Key</button></div>
-          <div id="recoverKeyResult" class="recover-key-result" hidden></div>
-        </div>
-      </details>
+      <details class="recover-key-card"><summary><span>Recover an older key</span><span class="recover-chevron">▸</span></summary><div class="recover-key-body"><p>After a phone/browser reset, enter a key you already generated. We will restore it to this device and show its current status.</p><div class="recover-row"><input id="recoverKeyInput" type="text" autocomplete="off" spellcheck="false" placeholder="AIRESZ-72H-XXXX-XXXX"><button id="recoverKeyBtn" class="primary-button" type="button">Recover Key</button></div><div id="recoverKeyResult" class="recover-key-result" hidden></div></div></details>
     </section>
 
-    <section id="how-it-works" class="how shell">
-      <div class="section-label">HOW IT WORKS</div>
-      <h2>Only four simple steps</h2>
-      <div class="how-grid">
-        <article><span>1</span><strong>Choose a Duration</strong><p>Select 24, 48, or 72 hours.</p></article>
-        <article><span>2</span><strong>Select a Provider</strong><p>Choose Linkvertise, Work.ink, or LootLabs.</p></article>
-        <article><span>3</span><strong>Complete Checkpoints</strong><p>Finish each checkpoint in order.</p></article>
-        <article><span>4</span><strong>Get Your Key</strong><p>Copy the key and enter it into the script.</p></article>
-      </div>
+    <section id="how-it-works" class="hub-section shell">
+      <div class="section-head compact"><div><span class="section-label">HOW IT WORKS</span><h2>Simple from start to finish</h2></div></div>
+      <div class="how-grid"><article><span>1</span><strong>Pick a game</strong><p>See what Airesz supports right now.</p></article><article><span>2</span><strong>Choose access</strong><p>Free, Premium, or Lifetime.</p></article><article><span>3</span><strong>Link Discord</strong><p>Keep your account and key history connected.</p></article><article><span>4</span><strong>Run your script</strong><p>Use your access and let Airesz handle verification.</p></article></div>
     </section>
 
-    <section id="status" class="status-strip shell">
-      <div><span class="status-dot"></span><strong>System Online</strong><small>Cloudflare API available</small></div>
-      <div><strong>3</strong><small>Checkpoint providers</small></div>
-      <div><strong>24/7</strong><small>Key verification</small></div>
-      <div><strong>HWID</strong><small>Device protection</small></div>
-    </section>
+    <section id="status" class="status-strip shell"><div><span class="status-dot"></span><strong>System Online</strong><small>Cloudflare API available</small></div><div><strong id="statusGameCount">—</strong><small>Supported games</small></div><div><strong>24/7</strong><small>Key verification</small></div><div><strong>HWID</strong><small>Device protection</small></div></section>
   </main>
 
-  <footer class="shell"><span>© 2026 Airesz. All rights reserved.</span><span>GitHub Pages · Cloudflare Workers · Discord Analytics</span></footer>
+  <footer class="shell"><span>© 2026 Airesz. All rights reserved.</span><span>Game support · Free Keys · Premium · Lifetime · Discord</span></footer>
 
-  <script src="config.js?v=3.14.0"></script>
-  <script src="app.js?v=3.14.0"></script>
+  <script src="config.js?v=4.0.0"></script>
+  <script src="app.js?v=4.0.0"></script>
 </body>
 </html>
