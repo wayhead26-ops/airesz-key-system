@@ -350,7 +350,13 @@ function gameMatches(item) {
 }
 
 function getGamePlaceId(game) {
-  return String(game?.placeIds?.[0] || game?.placeId || game?.gameId || "").trim();
+  return String(
+    game?.thumbnailPlaceId
+    || game?.placeId
+    || game?.placeIds?.[0]
+    || game?.gameId
+    || ""
+  ).trim();
 }
 
 function getGameLoadstring() {
