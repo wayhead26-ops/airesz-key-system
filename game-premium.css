@@ -1,0 +1,83 @@
+/* Airesz Game Premium Cards v3.21.0 */
+.game-card.has-premium{
+  border-color:rgba(183,112,255,.3);
+  box-shadow:0 18px 50px rgba(62,27,111,.12);
+}
+.game-cover{position:relative}
+.game-premium-cover-badge{
+  position:absolute;
+  left:12px;
+  bottom:12px;
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:6px 9px;
+  border:1px solid rgba(209,145,255,.38);
+  border-radius:999px;
+  background:rgba(36,16,58,.84);
+  color:#e4bdff;
+  font-size:.55rem;
+  font-weight:950;
+  letter-spacing:.06em;
+  box-shadow:0 7px 22px rgba(107,45,172,.22);
+  backdrop-filter:blur(10px);
+}
+.game-premium-banner{
+  margin-top:12px;
+  padding:12px;
+  border:1px solid rgba(187,108,255,.25);
+  border-radius:12px;
+  background:
+    radial-gradient(circle at 100% 0,rgba(172,76,255,.16),transparent 45%),
+    linear-gradient(145deg,rgba(89,39,137,.12),rgba(31,18,48,.42));
+}
+.game-premium-heading{
+  display:flex;
+  align-items:center;
+  gap:9px;
+}
+.game-premium-heading>span{font-size:1.05rem}
+.game-premium-heading strong,.game-premium-heading small{display:block}
+.game-premium-heading strong{
+  color:#e3b7ff;
+  font-size:.62rem;
+  font-weight:950;
+  letter-spacing:.08em;
+}
+.game-premium-heading small{
+  margin-top:2px;
+  color:#9f93ad;
+  font-size:.54rem;
+}
+.game-premium-highlights{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  margin-top:10px;
+}
+.game-premium-highlights span{
+  padding:5px 7px;
+  border:1px solid rgba(197,126,255,.18);
+  border-radius:7px;
+  background:rgba(176,83,255,.07);
+  color:#d9c7e7;
+  font-size:.54rem;
+  font-weight:750;
+}
+.game-premium-more{
+  margin-top:8px;
+  color:#b383d3;
+  font-size:.54rem;
+  font-weight:800;
+}
+.premium-modal-more{
+  display:block;
+  margin-top:8px;
+  color:#b58bcf;
+  font-size:.6rem;
+}
+@media(max-width:700px){
+  .game-premium-banner{padding:11px}
+  .game-premium-highlights{gap:5px}
+  .game-premium-highlights span{font-size:.52rem}
+}

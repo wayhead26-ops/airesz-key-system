@@ -79,26 +79,53 @@ function maskKey(key) {
   return `${text.slice(0, 12)}…${text.slice(-4)}`;
 }
 
+function formatResetCooldown(seconds) {
+  let value = Math.max(0, Number(seconds || 0));
+  const hours = Math.floor(value / 3600);
+  value %= 3600;
+  const minutes = Math.ceil(value / 60);
+  if (hours > 0) return `${hours}h ${Math.min(59, minutes)}m`;
+  return `${Math.max(1, minutes)}m`;
+}
+
 function renderKeyHistoryCard(item) {
   const [label, cls] = keyStateLabel(item);
   const keyText = item.key || maskKey(item.prefix);
   const canCopy = Boolean(item.key);
   const isActiveKey = cls === "active" || cls === "expiring";
-  const remainingResets = item.resetsRemaining == null ? 1 : Number(item.resetsRemaining);
-  const canReset = isActiveKey && remainingResets != null && remainingResets > 0;
+  const selfResetEligible = item.selfHwidResetEligible === true;
+  const unlimitedResets = selfResetEligible && item.maxResets == null;
+  const remainingResets = unlimitedResets
+    ? null
+    : (item.resetsRemaining == null ? null : Math.max(0, Number(item.resetsRemaining)));
+  const retryAfter = Math.max(0, Number(item.resetRetryAfter || 0));
+  const hasResetAllowance = unlimitedResets || (remainingResets != null && remainingResets > 0);
+  const canResetNow = isActiveKey && selfResetEligible && hasResetAllowance && retryAfter <= 0;
+  const resetButton = selfResetEligible && isActiveKey
+    ? canResetNow
+      ? `<button class="key-history-reset" type="button" data-reset-hwid data-key-id="${escapeHtml(item.id || "")}">↻ Reset HWID</button>`
+      : retryAfter > 0
+        ? `<button class="key-history-reset" type="button" disabled>↻ Cooldown ${escapeHtml(formatResetCooldown(retryAfter))}</button>`
+        : `<button class="key-history-reset" type="button" disabled>↻ Reset Limit Reached</button>`
+    : "";
   const action = item.state === "deleted"
     ? '<span class="key-history-note">This key was deleted and is no longer active.</span>'
     : item.state === "hwid_mismatch"
     ? '<span class="key-history-note">Get a new key to continue.</span>'
     : canCopy
-      ? `<div class="key-history-action-group"><button class="key-history-copy" type="button" data-key="${encodeURIComponent(item.key)}">Copy Key</button>${canReset ? `<button class="key-history-reset" type="button" data-reset-hwid data-key-id="${escapeHtml(item.id || "")}">↻ Reset HWID</button>` : ''}</div>`
+      ? `<div class="key-history-action-group"><button class="key-history-copy" type="button" data-key="${encodeURIComponent(item.key)}">Copy Key</button>${resetButton}</div>`
       : '<span class="key-history-note">Enter the key below to recover.</span>';
 
+  const resetMeta = !selfResetEligible
+    ? ""
+    : unlimitedResets
+      ? `<span>HWID Reset: Unlimited · 6h cooldown</span>`
+      : `<span>HWID Reset: ${remainingResets == null ? "—" : remainingResets} remaining · 6h cooldown</span>`;
   const keyTitle = item.source === "giveaway" ? "Giveaway Key" : item.plan ? `${item.plan} Key` : "Airesz Key";
   return `<article class="key-history-card ${cls} ${item.source === "giveaway" ? "giveaway" : ""}">
     <div class="key-history-top"><div><span class="key-state-pill ${cls}">${label}</span>${item.premium ? '<span class="premium-chip">💎 PREMIUM</span>' : ""}<strong>${keyTitle}</strong></div><span class="key-history-time">${item.expiresAt == null ? "Lifetime" : remainingText(item.expiresAt)}</span></div>
     <code>${canCopy ? escapeHtml(item.key) : escapeHtml(keyText || "Unknown key")}</code>
-    <div class="key-history-meta"><span>Issued ${item.issuedAt ? new Date(Number(item.issuedAt) * 1000).toLocaleString() : "—"}</span><span>${item.expiresAt == null ? "No expiry" : `Expires ${new Date(Number(item.expiresAt) * 1000).toLocaleString()}`}</span>${remainingResets == null ? "" : `<span>HWID Reset: ${Math.max(0, remainingResets)} remaining</span>`}</div>
+    <div class="key-history-meta"><span>Issued ${item.issuedAt ? new Date(Number(item.issuedAt) * 1000).toLocaleString() : "—"}</span><span>${item.expiresAt == null ? "No expiry" : `Expires ${new Date(Number(item.expiresAt) * 1000).toLocaleString()}`}</span>${resetMeta}</div>
     <div class="key-history-actions">${action}</div>
   </article>`;
 }
@@ -409,7 +436,17 @@ function openGameModal(game) {
   const features = Array.isArray(game.features) && game.features.length
     ? game.features.slice(0, 10)
     : ["Game Script", "HWID Protected", "Cloud Verified", "Regular Updates"];
-  const premiumFeatures = Array.isArray(game.premiumFeatures) ? game.premiumFeatures.slice(0, 8) : [];
+  const premiumFeatures = Array.isArray(game.premiumFeatures)
+    ? game.premiumFeatures.filter(Boolean).slice(0, 8)
+    : [];
+  const premiumAvailable = game.premiumAvailable === true || premiumFeatures.length > 0;
+  const premiumColumn = premiumAvailable
+    ? `<div class="feature-column premium-column">
+        <h3>💎 ${escapeHtml(game.premiumLabel || "Premium Features")}</h3>
+        ${premiumFeatures.map((feature) => `<span>💎 ${escapeHtml(feature)}</span>`).join("")}
+        ${game.premiumMore ? '<small class="premium-modal-more">+ more Premium features available in-game</small>' : ""}
+      </div>`
+    : "";
   modal.dataset.gameName = game.name || "Game";
   modal.dataset.placeId = getGamePlaceId(game);
   modal.dataset.gameJson = JSON.stringify(game);
@@ -421,13 +458,15 @@ function openGameModal(game) {
   $("#gameModalVersion").textContent = game.version ? `v${game.version}` : "Ready";
   $("#gameModalDescription").textContent = game.maintenance
     ? (game.maintenanceMessage || "This game is currently under maintenance.")
-    : "Airesz script ready for this game with cloud verification and automatic updates.";
+    : premiumAvailable
+      ? "Airesz script ready for this game with Standard access and additional Premium features."
+      : "Airesz script ready for this game with cloud verification and automatic updates.";
   const statusNode = $("#gameModalStatus");
   statusNode.className = `game-status ${statusClass}`;
   statusNode.innerHTML = `<i></i>${status}`;
   $("#gameModalFeatures").innerHTML = `
     <div class="feature-column"><h3>Standard Features</h3>${features.map((feature) => `<span>✓ ${escapeHtml(feature)}</span>`).join("")}</div>
-    <div class="feature-column premium-column"><h3>💎 Premium Features</h3>${(premiumFeatures.length ? premiumFeatures : ["Advanced tools", "Experimental features"]).map((feature) => `<span>💎 ${escapeHtml(feature)}</span>`).join("")}</div>`;
+    ${premiumColumn}`;
   $("#gameModalNotice").textContent = "";
   const scriptBtn = $("#gameModalScriptBtn");
   scriptBtn.disabled = Boolean(game.maintenance);
@@ -488,15 +527,27 @@ function renderGames() {
     const standardFeatures = Array.isArray(game.features) && game.features.length
       ? game.features.slice(0, 3)
       : ["Game Script", "HWID Protected", "Cloud Verified"];
-    const premiumFeatures = Array.isArray(game.premiumFeatures) ? game.premiumFeatures.slice(0, 2) : [];
+    const premiumFeatures = Array.isArray(game.premiumFeatures)
+      ? game.premiumFeatures.filter(Boolean)
+      : [];
+    const premiumAvailable = game.premiumAvailable === true || premiumFeatures.length > 0;
+    const premiumHighlights = premiumFeatures.slice(0, 4);
+    const premiumBanner = premiumAvailable
+      ? `<div class="game-premium-banner">
+          <div class="game-premium-heading"><span>💎</span><div><strong>${escapeHtml(game.premiumLabel || "PREMIUM AVAILABLE")}</strong><small>Extra intelligence and automation tools</small></div></div>
+          <div class="game-premium-highlights">${premiumHighlights.map((feature) => `<span>${escapeHtml(feature)}</span>`).join("")}</div>
+          ${(game.premiumMore || premiumFeatures.length > premiumHighlights.length) ? '<div class="game-premium-more">+ more Premium features</div>' : ""}
+        </div>`
+      : "";
     const gameId = `game-${index}`;
     const payload = encodeURIComponent(JSON.stringify(game));
-    return `<article class="game-card" data-game-id="${gameId}">
+    return `<article class="game-card ${premiumAvailable ? "has-premium" : ""}" data-game-id="${gameId}">
       <button class="game-cover-button" type="button" data-game-view="${payload}" aria-label="View ${escapeHtml(game.name)}">
-        <div class="game-cover"><img src="${escapeHtml(icon)}" data-place-thumb="${escapeHtml(placeId)}" alt="${escapeHtml(game.name)} thumbnail" loading="lazy"><span class="game-status ${statusClass}"><i></i>${status}</span></div>
+        <div class="game-cover"><img src="${escapeHtml(icon)}" data-place-thumb="${escapeHtml(placeId)}" alt="${escapeHtml(game.name)} thumbnail" loading="lazy"><span class="game-status ${statusClass}"><i></i>${status}</span>${premiumAvailable ? '<span class="game-premium-cover-badge">💎 PREMIUM</span>' : ""}</div>
       </button>
       <div class="game-card-body"><div class="game-card-title"><div><span class="game-place">Roblox Game</span><h3>${escapeHtml(game.name)}</h3></div><span class="game-version">${version}</span></div>
-      <div class="game-feature-list">${standardFeatures.map((feature) => `<span>✓ ${escapeHtml(feature)}</span>`).join("")}${premiumFeatures.map((feature) => `<span class="premium-feature-chip">💎 ${escapeHtml(feature)}</span>`).join("")}</div>
+      <div class="game-feature-list">${standardFeatures.map((feature) => `<span>✓ ${escapeHtml(feature)}</span>`).join("")}</div>
+      ${premiumBanner}
       <div class="game-card-actions">
         <button class="game-view-button game-script-button" type="button" data-game-script="${payload}" ${game.maintenance ? "disabled" : ""}>Get Script <span>↗</span></button>
         <button class="game-key-button" type="button" data-game-key="${payload}" ${game.maintenance ? "disabled" : ""}>Get Key</button>
@@ -655,13 +706,16 @@ async function resetHwidFromWebsite(button = null, keyId = "") {
     loginWithDiscord();
     return;
   }
-  if (!confirm("Reset your Discord-linked HWID now? This consumes one available HWID reset and is shared with /resethwid in Discord.")) return;
+  if (!confirm("Reset your Discord-linked HWID now? A successful reset starts a 6-hour cooldown. Lifetime keys have unlimited resets; temporary/giveaway keys keep their configured reset allowance.")) return;
   if (button) { button.disabled = true; button.textContent = "Resetting…"; }
   try {
     const data = await api("/api/client/discord/reset-hwid-web", { method: "POST", body: { keyId: keyId || undefined } });
-    const remaining = data.resetsRemaining == null ? "Unlimited" : String(data.resetsRemaining);
-    showToast(`HWID reset successful ✓ · ${remaining} reset${remaining === "1" ? "" : "s"} remaining`, true);
-    setMessage("HWID reset successfully. You can use the key on another device.", true);
+    const unlimited = data.maxResets == null;
+    const remaining = unlimited ? "Unlimited" : String(data.resetsRemaining ?? 0);
+    showToast(unlimited
+      ? "HWID reset successful ✓ · Unlimited resets · 6h cooldown started"
+      : `HWID reset successful ✓ · ${remaining} reset${remaining === "1" ? "" : "s"} remaining · 6h cooldown started`, true);
+    setMessage("HWID reset successfully. You can use the key on another device. The 6-hour self-reset cooldown is now active.", true);
     await loadMyKeys();
   } catch (error) {
     showToast(error?.message || "HWID reset failed.", false);
