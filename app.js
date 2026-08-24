@@ -255,19 +255,48 @@ async function loadCommerceConfig() {
     const data = await api("/api/commerce/config");
     Object.assign(commerceState.products, data.products || {});
     commerceState.loaded = true;
+
     const premium = commerceState.products.premium || {};
-    const premiumButtons = [$("#buyPremiumBtn"), $("#pricingPremiumBtn")].filter(Boolean);
-    premiumButtons.forEach((button) => {
+    const bundle = commerceState.products.bundle || {};
+
+    const premiumPriceText = premium.amountCents
+      ? `${(premium.amountCents / 100).toFixed(2).replace(/\.00$/, "")} ${String(premium.currency || "usd").toUpperCase()}`
+      : "";
+
+    [$("#buyPremiumBtn"), $("#pricingPremiumBtn")].filter(Boolean).forEach((button) => {
       const available = Boolean(premium.available);
       button.disabled = !available;
       button.classList.toggle("is-ready", available);
-      const price = premium.amountCents ? `${(premium.amountCents / 100).toFixed(2).replace(/\.00$/, "")} ${String(premium.currency || "usd").toUpperCase()}` : "";
       const small = button.querySelector("small");
-      if (small) small.textContent = available ? price : "Coming soon";
-      if (button.id === "pricingPremiumBtn") button.textContent = available ? `💎 Buy Premium · ${price}` : "💎 Buy Premium ";
+      if (small) small.textContent = available ? premiumPriceText : "Coming soon";
+      if (button.id === "pricingPremiumBtn") {
+        button.textContent = available
+          ? `💎 Upgrade to Premium · ${premiumPriceText}`
+          : "💎 Premium Upgrade · Coming soon";
+      }
     });
+
     const premiumPrice = $("#premiumPrice");
-    if (premiumPrice) premiumPrice.innerHTML = premium.available && premium.amountCents ? `$${(premium.amountCents / 100).toFixed(2).replace(/\.00$/, "")} <small>${String(premium.currency || "usd").toUpperCase()}</small>` : "Coming Soon";
+    if (premiumPrice) {
+      premiumPrice.innerHTML = premium.available && premium.amountCents
+        ? `$${(premium.amountCents / 100).toFixed(2).replace(/\.00$/, "")} <small>${String(premium.currency || "usd").toUpperCase()}</small>`
+        : "Coming Soon";
+    }
+
+    const bundlePriceText = bundle.amountCents
+      ? `${(bundle.amountCents / 100).toFixed(2).replace(/\.00$/, "")} ${String(bundle.currency || "usd").toUpperCase()}`
+      : "7.99 USD";
+
+    $$('button[data-product="BUNDLE"]').forEach((button) => {
+      const available = bundle.available !== false;
+      button.disabled = !available;
+      button.classList.toggle("is-ready", available);
+      if (available) {
+        button.textContent = `✨ Lifetime + Premium · ${bundlePriceText}`;
+      } else {
+        button.textContent = "✨ Lifetime + Premium · Coming soon";
+      }
+    });
   } catch (error) {
     console.warn("Commerce config unavailable", error);
   }
@@ -978,10 +1007,9 @@ $("#heroGetScriptBtn")?.addEventListener("click", async () => {
   await copySiteLoadstring($("#heroGetScriptBtn"));
 });
 $("#startBtn").addEventListener("click", startRoute);
-$("#buyLifetimeBtn")?.addEventListener("click", () => startProductCheckout("LIFETIME"));
-$("#buyPremiumBtn")?.addEventListener("click", () => startProductCheckout("PREMIUM"));
-$("#pricingPremiumBtn")?.addEventListener("click", () => startProductCheckout("PREMIUM"));
-$$(`button[data-product="LIFETIME"]`).forEach((button) => button.addEventListener("click", () => startProductCheckout("LIFETIME")));
+$$("button[data-product]").forEach((button) => {
+  button.addEventListener("click", () => startProductCheckout(button.dataset.product || "LIFETIME"));
+});
 bindGameControls();
 
 $("#closeGameModal")?.addEventListener("click", closeGameModal);
@@ -1027,25 +1055,82 @@ $("#discordLogoutBtn")?.addEventListener("click", logoutDiscord);
 $("#discordLogoutAllBtn")?.addEventListener("click", logoutAllDiscordDevices);
 async function startProductCheckout(product = "LIFETIME") {
   const normalized = String(product || "LIFETIME").toUpperCase();
+  if (!["LIFETIME", "PREMIUM", "BUNDLE"].includes(normalized)) {
+    setMessage("Unknown Airesz product.");
+    return;
+  }
+
   const discordLinkToken = new URLSearchParams(location.search).get("discord_link") || "";
+
   if (!state.discordUser && !discordLinkToken) {
     localStorage.setItem("airesz_pending_product_checkout", normalized);
     setMessage("Login with Discord before buying. Returning you to checkout after login…", true);
     loginWithDiscord();
     return;
   }
-  const buttons = [$("#buyLifetimeBtn"), $("#buyPremiumBtn"), $("#pricingPremiumBtn"), ...$$(`button[data-product="${normalized}"]`)].filter(Boolean);
+
+  const buttons = $$("button[data-product]");
   buttons.forEach((button) => { button.disabled = true; });
-  setMessage(`Opening secure Stripe Checkout for ${normalized === "PREMIUM" ? "Premium" : "Lifetime"}…`, true);
+
+  const label = normalized === "PREMIUM"
+    ? "Premium Upgrade"
+    : normalized === "BUNDLE"
+      ? "Lifetime + Premium"
+      : "Lifetime";
+
+  setMessage(`Opening secure Stripe Checkout for ${label}…`, true);
+
   try {
-    const data = await api("/api/stripe/checkout", { method: "POST", body: { clientToken: state.clientToken, product: normalized, ...(discordLinkToken ? { discordLinkToken } : {}) } });
+    const data = await api("/api/stripe/checkout", {
+      method: "POST",
+      body: {
+        clientToken: state.clientToken,
+        product: normalized,
+        ...(discordLinkToken ? { discordLinkToken } : {})
+      }
+    });
+
     if (!data.url) throw new Error("Stripe checkout URL was not returned.");
     location.href = data.url;
   } catch (error) {
+    if (error?.data?.code === "BUNDLE_REQUIRED") {
+      const amount = Number(error.data.bundleAmountCents || 799) / 100;
+      const confirmed = window.confirm(
+        `Premium $2.99 is for existing Lifetime users.\n\n` +
+        `You do not have an active Lifetime key yet.\n` +
+        `Buy Lifetime + Premium for $${amount.toFixed(2)} instead?`
+      );
+
+      if (confirmed) {
+        buttons.forEach((button) => { button.disabled = false; });
+        return startProductCheckout("BUNDLE");
+      }
+
+      setMessage("Premium checkout cancelled. You can buy Lifetime first or choose the $7.99 bundle.");
+      return;
+    }
+
+    if (error?.data?.code === "PREMIUM_UPGRADE_RECOMMENDED") {
+      const amount = Number(error.data.premiumAmountCents || 299) / 100;
+      const confirmed = window.confirm(
+        `You already own Lifetime.\n\nUpgrade that same key to Premium for $${amount.toFixed(2)}?`
+      );
+
+      if (confirmed) {
+        buttons.forEach((button) => { button.disabled = false; });
+        return startProductCheckout("PREMIUM");
+      }
+
+      setMessage("Bundle checkout cancelled.");
+      return;
+    }
+
     setMessage(error.message);
     await loadGlobalMaintenanceStatus();
     await loadCommerceConfig();
-  } finally { buttons.forEach((button) => { if (button) button.disabled = false; }); }
+  } finally {
+    buttons.forEach((button) => { button.disabled = false; });
+  }
 }
 
 async function startLifetimeCheckout() {
@@ -1057,34 +1142,63 @@ async function handleStripeReturn() {
   const params = new URLSearchParams(location.search);
   const success = params.get("stripe_success");
   const cancel = params.get("stripe_cancel");
-  const sessionId = params.get("session_id");
+  const sessionId = params.get("session_id") || "";
+  const requestedProductRaw = String(params.get("product") || "LIFETIME").toUpperCase();
+  const requestedProduct = ["LIFETIME", "PREMIUM", "BUNDLE"].includes(requestedProductRaw)
+    ? requestedProductRaw
+    : "LIFETIME";
+
+  const requestedLabel = requestedProduct === "PREMIUM"
+    ? "Premium Upgrade"
+    : requestedProduct === "BUNDLE"
+      ? "Lifetime + Premium"
+      : "Lifetime";
 
   if (cancel === "1") {
-    setMessage("Payment cancelled. No Lifetime key was created.");
+    setMessage(`Payment cancelled. No ${requestedLabel} purchase was applied.`);
     history.replaceState({}, "", location.pathname + location.hash);
     return;
   }
 
-  if (success !== "1" || !sessionId) return;
+  // Do not require sessionId. Worker can recover a webhook-fulfilled order.
+  if (success !== "1") return;
 
-  const claimedProduct = params.get("product") === "PREMIUM" ? "Premium" : "Lifetime";
-  setMessage(`Payment confirmed by Stripe. Preparing your ${claimedProduct} access…`, true);
+  setMessage(`Payment confirmed by Stripe. Preparing your ${requestedLabel} access…`, true);
+
   try {
     const data = await api("/api/stripe/claim", {
       method: "POST",
-      body: { clientToken: state.clientToken, sessionId }
+      body: {
+        clientToken: state.clientToken,
+        sessionId,
+        product: requestedProduct
+      }
     });
-    if (!data.key) throw new Error("Lifetime key was not returned.");
+
+    if (!data.key) throw new Error("Stripe purchase key was not returned.");
+
+    const product = String(data.product || requestedProduct).toUpperCase();
+    const premiumAccess = product === "PREMIUM" || product === "BUNDLE";
+
     saveIssuedKey(data);
     $("#keyOutput").textContent = data.key;
     $("#expiryText").textContent = "Never expires";
     $("#keyBox").classList.remove("hidden");
-    $("#routeState").textContent = "Lifetime Unlocked";
+    $("#routeState").textContent = premiumAccess ? "Premium Unlocked" : "Lifetime Unlocked";
+
     await loadMyKeys();
-    setMessage(data.premium ? "🎉 Premium purchase complete. Your Lifetime key now has Premium access." : "🎉 Lifetime purchase complete. Your permanent key is ready.", true);
+
+    if (product === "BUNDLE") {
+      setMessage("🎉 Lifetime + Premium unlocked. One permanent Premium key is ready.", true);
+    } else if (product === "PREMIUM") {
+      setMessage("🎉 Premium upgrade complete. Your existing Lifetime key now has Premium access.", true);
+    } else {
+      setMessage("🎉 Lifetime purchase complete. Your permanent key is ready.", true);
+    }
+
     location.hash = "my-keys";
   } catch (error) {
-    setMessage(error.message || "We could not claim your Lifetime key yet.");
+    setMessage(error?.message || `We could not confirm your ${requestedLabel} purchase yet.`);
   } finally {
     history.replaceState({}, "", location.pathname + location.hash);
   }
@@ -1125,9 +1239,16 @@ async function handleStripeReturn() {
       $("#routeState").textContent = "Resuming";
       $("#startBtn").innerHTML = '<span>↻</span> Route Started';
       renderSteps();
-      const returnedFromProvider = params.has("resume") || params.has("checkpoint") || params.has("error");
-      if (returnedFromProvider) await pollAfterReturn();
-      else await refreshSession();
+      const providerRejected = params.get("checkpoint") === "rejected" || params.has("error");
+      const returnedFromProvider = params.has("resume") || params.has("checkpoint");
+
+      if (providerRejected) {
+        await refreshSession();
+      } else if (returnedFromProvider) {
+        await pollAfterReturn();
+      } else {
+        await refreshSession();
+      }
     }
     if (params.get("error")) setMessage(params.get("error"));
     history.replaceState({}, "", location.pathname + location.hash);

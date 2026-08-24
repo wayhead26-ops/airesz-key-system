@@ -139,20 +139,21 @@
         <div class="lifetime-kicker"><span>✦</span> DIRECT ACCESS</div>
         <div class="mini-brand"><img src="assets/airesz-mark.png" alt=""><div><strong>LIFETIME & PREMIUM</strong><span>ONE-TIME PURCHASES</span></div></div>
         <div class="access-mini-grid">
-          <article class="access-mini lifetime-mini"><span>🔑</span><div><strong>Lifetime</strong><small>Permanent key · $5</small></div></article>
-          <article class="access-mini premium-mini"><span>💎</span><div><strong>Premium</strong><small>Lifetime + exclusive features</small></div></article>
+          <article class="access-mini lifetime-mini"><span>🔑</span><div><strong>Lifetime</strong><small>Permanent Standard key · $5</small></div></article>
+          <article class="access-mini premium-mini"><span>💎</span><div><strong>Premium Upgrade</strong><small>Existing Lifetime users · $2.99</small></div></article>
         </div>
         <div class="route-summary">
-          <div><span>Lifetime</span><strong>No expiry</strong></div>
-          <div><span>Premium</span><strong>Exclusive tools</strong></div>
-          <div><span>Recovery</span><strong>Discord linked</strong></div>
+          <div><span>Lifetime</span><strong>$5 · No expiry</strong></div>
+          <div><span>Premium Upgrade</span><strong>$2.99</strong></div>
+          <div><span>New-user Bundle</span><strong>$7.99</strong></div>
         </div>
         <div class="manual-sale">
-          <span>✓</span><div><strong>One-time checkout</strong><p>No monthly subscription. Premium can upgrade an existing Lifetime key.</p></div>
+          <span>✓</span><div><strong>One-time checkout</strong><p>Premium Upgrade uses your existing Lifetime key. New users can get Lifetime + Premium together for $7.99.</p></div>
         </div>
         <div class="lifetime-actions pricing-actions">
           <button id="buyLifetimeBtn" class="primary-button lifetime-buy-button" data-product="LIFETIME" type="button">🔑 Buy Lifetime · $5</button>
-          <button id="buyPremiumBtn" class="premium-buy-button" data-product="PREMIUM" type="button">💎 Buy Premium <small>Coming soon</small></button>
+          <button id="buyPremiumBtn" class="premium-buy-button" data-product="PREMIUM" type="button">💎 Premium Upgrade <small>$2.99 USD</small></button>
+          <button class="premium-buy-button" data-product="BUNDLE" type="button">✨ Lifetime + Premium · $7.99 USD</button>
           <a id="manualSupportLink" class="secondary-button" target="_blank" rel="noopener noreferrer">Contact Admin</a>
         </div>
       </aside>
@@ -165,7 +166,7 @@
       <div class="pricing-grid">
         <article class="pricing-card free-card"><div class="pricing-icon">⚡</div><span class="pricing-badge">FREE</span><h3>Get Key</h3><p>Use the normal checkpoint route to generate temporary access.</p><ul><li>24 / 48 / 72 hour routes</li><li>Supported game access</li><li>HWID protection</li><li>Discord login optional</li></ul><a class="secondary-button" href="#get-key">Get Free Key</a></article>
         <article class="pricing-card lifetime-card"><div class="pricing-icon">🔑</div><span class="pricing-badge">BEST VALUE</span><h3>Lifetime</h3><div class="pricing-price">$5 <small>USD</small></div><p>One-time purchase for permanent key access.</p><ul><li>Lifetime key</li><li>No expiry</li><li>Discord-linked recovery</li><li>Existing flow stays unchanged</li></ul><button class="lifetime-buy-button" data-product="LIFETIME" type="button">Buy Lifetime</button></article>
-        <article class="pricing-card premium-card"><div class="pricing-icon">💎</div><span class="pricing-badge premium-badge">PREMIUM</span><h3>Premium</h3><div id="premiumPrice" class="pricing-price">— <small>USD</small></div><p>Lifetime access plus extra advanced and experimental features.</p><ul><li>Everything in Lifetime</li><li>Premium-only functions</li><li>Advanced / experimental tools</li><li>Premium Discord role</li></ul><button id="pricingPremiumBtn" class="premium-buy-button" data-product="PREMIUM" type="button">Buy Premium <small>Coming soon</small></button></article>
+        <article class="pricing-card premium-card"><div class="pricing-icon">💎</div><span class="pricing-badge premium-badge">PREMIUM</span><h3>Premium Upgrade</h3><div id="premiumPrice" class="pricing-price">$2.99 <small>USD</small></div><p>For users who already own an active Lifetime key. Upgrades the same key — no second key is created.</p><ul><li>Requires active Lifetime</li><li>Premium-only functions</li><li>Advanced / experimental tools</li><li>Premium Discord role</li></ul><button id="pricingPremiumBtn" class="premium-buy-button" data-product="PREMIUM" type="button">💎 Upgrade to Premium · $2.99</button><button class="secondary-button" data-product="BUNDLE" type="button">✨ New user? Lifetime + Premium · $7.99</button></article>
       </div>
     </section>
     <div id="gameModal" class="game-modal hidden" aria-hidden="true">
@@ -229,6 +230,6 @@
   <footer class="shell"><span>© 2026 Airesz. All rights reserved.</span><span>Games · Keys · Lifetime · Premium · Discord</span></footer>
 
   <script src="config.js?v=3.16.0"></script>
-  <script src="app.js?v=3.19.0"></script>
+  <script src="app.js?v=3.20.0"></script>
 </body>
 </html>
