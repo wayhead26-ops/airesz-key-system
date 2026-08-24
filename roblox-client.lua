@@ -123,6 +123,16 @@ local function startAireszSession(key, onBlocked)
         return self.allowed and not self.stopped
     end
 
+    function session:IsPremium()
+        if not self:IsAllowed() then
+            return false
+        end
+
+        local verification = self.verification
+        return type(verification) == "table"
+            and verification.premium == true
+    end
+
     function session:AssertAllowed()
         assert(self:IsAllowed(), "Airesz authorization is no longer active.")
         return true
@@ -332,6 +342,9 @@ local function startAireszSession(key, onBlocked)
                 networkFailures = 0
                 if heartbeat.sessionToken then
                     session.token = tostring(heartbeat.sessionToken)
+                end
+                if heartbeat.premium ~= nil and type(session.verification) == "table" then
+                    session.verification.premium = heartbeat.premium == true
                 end
                 if tonumber(heartbeat.heartbeatSeconds) then
                     session.heartbeatSeconds = math.max(
