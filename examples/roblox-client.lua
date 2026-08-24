@@ -6,6 +6,8 @@ local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 local RuntimeEnv = type(getgenv) == "function" and getgenv() or _G
+local CLIENT_VERSION = "6.1.0"
+local EXECUTION_ID = HttpService:GenerateGUID(false)
 
 local function getRequestFunction()
     return request or http_request or (syn and syn.request)
@@ -60,7 +62,9 @@ local function identityPayload()
         placeId = tostring(game.PlaceId),
         jobId = tostring(game.JobId or ""),
         hwid = getHwid(),
-        executorName = getExecutorName()
+        executorName = getExecutorName(),
+        clientVersion = CLIENT_VERSION,
+        executionId = EXECUTION_ID
     }
 end
 
@@ -101,7 +105,7 @@ local function startAireszSession(key, onBlocked)
         stopped = false,
         token = result.sessionToken,
         sessionId = result.sessionId,
-        heartbeatSeconds = 10,
+        heartbeatSeconds = tonumber(result.heartbeatSeconds) or 30,
         verification = result,
         cleanupCallbacks = {},
         trackedConnections = {},
@@ -119,6 +123,16 @@ local function startAireszSession(key, onBlocked)
         return self.allowed and not self.stopped
     end
 
+    function session:IsPremium()
+        if not self:IsAllowed() then
+            return false
+        end
+
+        local verification = self.verification
+        return type(verification) == "table"
+            and verification.premium == true
+    end
+
     function session:AssertAllowed()
         assert(self:IsAllowed(), "Airesz authorization is no longer active.")
         return true
@@ -128,15 +142,12 @@ local function startAireszSession(key, onBlocked)
         return self.verification and self.verification.game or nil
     end
 
-    -- Private game scripts use this to stop loops, disconnect events and close UI.
     function session:RegisterCleanup(callback)
         assert(type(callback) == "function", "RegisterCleanup expects a function.")
         table.insert(self.cleanupCallbacks, callback)
         return callback
     end
 
-    -- Connections registered by a protected payload are disconnected before
-    -- the payload UI is removed. This prevents old callbacks surviving re-key.
     function session:RegisterConnection(connection)
         assert(
             typeof(connection) == "RBXScriptConnection",
@@ -146,7 +157,6 @@ local function startAireszSession(key, onBlocked)
         return connection
     end
 
-    -- Optional helper for GUI or other instances owned by a protected payload.
     function session:TrackInstance(instance)
         assert(typeof(instance) == "Instance", "TrackInstance expects an Instance.")
         table.insert(self.trackedInstances, instance)
@@ -329,7 +339,15 @@ local function startAireszSession(key, onBlocked)
                 if heartbeat.sessionToken then
                     session.token = tostring(heartbeat.sessionToken)
                 end
-                session.heartbeatSeconds = 10
+                if heartbeat.premium ~= nil and type(session.verification) == "table" then
+                    session.verification.premium = heartbeat.premium == true
+                end
+                if tonumber(heartbeat.heartbeatSeconds) then
+                    session.heartbeatSeconds = math.max(
+                        5,
+                        tonumber(heartbeat.heartbeatSeconds)
+                    )
+                end
             elseif heartbeatStatus == 0 or heartbeatStatus >= 500 then
                 networkFailures = networkFailures + 1
                 if networkFailures >= 3 then
