@@ -375,19 +375,29 @@ async function copySiteLoadstring(button = null) {
 }
 
 const robloxThumbnailCache = new Map();
+const GAME_THUMBNAIL_FALLBACK = "assets/airesz-mark.png";
+
+function applyGameThumbnailFallback(node) {
+  if (!node) return;
+  node.onerror = null;
+  node.src = GAME_THUMBNAIL_FALLBACK;
+  node.dataset.robloxResolved = "fallback";
+}
 
 async function getRobloxPlaceIcon(placeId) {
   const id = String(placeId || "").trim();
   if (!/^\d+$/.test(id)) return null;
   if (robloxThumbnailCache.has(id)) return robloxThumbnailCache.get(id);
+
   try {
-    const response = await fetch(`https://thumbnails.roblox.com/v1/places/gameicons?placeIds=${encodeURIComponent(id)}&size=512x512&format=Png&isCircular=false`);
-    if (!response.ok) throw new Error(`Roblox thumbnail HTTP ${response.status}`);
-    const data = await response.json();
-    const image = data?.data?.[0]?.imageUrl || null;
+    const data = await api(`/api/games/thumbnail?placeId=${encodeURIComponent(id)}`);
+    const image = typeof data?.imageUrl === "string" && /^https:\/\//i.test(data.imageUrl)
+      ? data.imageUrl
+      : null;
     robloxThumbnailCache.set(id, image);
     return image;
-  } catch {
+  } catch (error) {
+    console.warn("Game thumbnail proxy unavailable", id, error?.message || error);
     robloxThumbnailCache.set(id, null);
     return null;
   }
@@ -397,10 +407,13 @@ async function hydrateGameThumbnails() {
   const nodes = [...document.querySelectorAll("[data-place-thumb]")];
   await Promise.all(nodes.map(async (node) => {
     const placeId = node.dataset.placeThumb || "";
+    node.onerror = () => applyGameThumbnailFallback(node);
     const image = await getRobloxPlaceIcon(placeId);
     if (image) {
       node.src = image;
       node.dataset.robloxResolved = "true";
+    } else {
+      applyGameThumbnailFallback(node);
     }
   }));
 }
@@ -450,10 +463,15 @@ function openGameModal(game) {
   modal.dataset.gameName = game.name || "Game";
   modal.dataset.placeId = getGamePlaceId(game);
   modal.dataset.gameJson = JSON.stringify(game);
-  $("#gameModalImage").src = icon;
-  $("#gameModalImage").dataset.placeThumb = placeId;
-  $("#gameModalImage").alt = `${game.name || "Game"} thumbnail`;
-  void getRobloxPlaceIcon(placeId).then((image) => { if (image) $("#gameModalImage").src = image; });
+  const modalImage = $("#gameModalImage");
+  modalImage.src = icon;
+  modalImage.dataset.placeThumb = placeId;
+  modalImage.alt = `${game.name || "Game"} thumbnail`;
+  modalImage.onerror = () => applyGameThumbnailFallback(modalImage);
+  void getRobloxPlaceIcon(placeId).then((image) => {
+    if (image) modalImage.src = image;
+    else applyGameThumbnailFallback(modalImage);
+  });
   $("#gameModalTitle").textContent = game.name || "Game";
   $("#gameModalVersion").textContent = game.version ? `v${game.version}` : "Ready";
   $("#gameModalDescription").textContent = game.maintenance
