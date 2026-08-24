@@ -387,18 +387,19 @@ function applyGameThumbnailFallback(node) {
 async function getRobloxPlaceIcon(placeId) {
   const id = String(placeId || "").trim();
   if (!/^\d+$/.test(id)) return null;
-  if (robloxThumbnailCache.has(id)) return robloxThumbnailCache.get(id);
+  const cacheKey = `experience:${id}`;
+  if (robloxThumbnailCache.has(cacheKey)) return robloxThumbnailCache.get(cacheKey);
 
   try {
-    const data = await api(`/api/games/thumbnail?placeId=${encodeURIComponent(id)}`);
+    const data = await api(`/api/games/thumbnail?placeId=${encodeURIComponent(id)}&kind=experience`);
     const image = typeof data?.imageUrl === "string" && /^https:\/\//i.test(data.imageUrl)
       ? data.imageUrl
       : null;
-    robloxThumbnailCache.set(id, image);
+    robloxThumbnailCache.set(cacheKey, image);
     return image;
   } catch (error) {
-    console.warn("Game thumbnail proxy unavailable", id, error?.message || error);
-    robloxThumbnailCache.set(id, null);
+    console.warn("Experience thumbnail proxy unavailable", id, error?.message || error);
+    robloxThumbnailCache.set(cacheKey, null);
     return null;
   }
 }

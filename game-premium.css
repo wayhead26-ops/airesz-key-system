@@ -81,3 +81,62 @@
   .game-premium-highlights{gap:5px}
   .game-premium-highlights span{font-size:.52rem}
 }
+
+
+/* v3.24.0 — equal-height game cards + anchored actions */
+.games-grid{align-items:stretch}
+.game-card{
+  display:flex;
+  flex-direction:column;
+  height:100%;
+}
+.game-cover-button{
+  display:block;
+  width:100%;
+  padding:0;
+  border:0;
+  background:transparent;
+  color:inherit;
+  text-align:inherit;
+  cursor:pointer;
+  flex:0 0 auto;
+}
+.game-card-body{
+  display:flex;
+  flex-direction:column;
+  flex:1 1 auto;
+}
+.game-card-actions{
+  display:grid;
+  grid-template-columns:minmax(0,1.35fr) minmax(92px,.65fr);
+  gap:8px;
+  margin-top:auto;
+  padding-top:12px;
+}
+.game-card-actions .game-view-button,
+.game-card-actions .game-key-button{
+  min-height:39px;
+}
+.game-key-button{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:100%;
+  padding:9px 10px;
+  border:1px solid rgba(139,92,246,.18);
+  border-radius:9px;
+  background:rgba(255,255,255,.012);
+  color:#d9d0ee;
+  font:inherit;
+  font-size:.6rem;
+  font-weight:850;
+  cursor:pointer;
+}
+.game-key-button:hover:not(:disabled){
+  border-color:rgba(155,112,255,.45);
+  background:rgba(139,92,246,.08);
+}
+.game-view-button:disabled,.game-key-button:disabled{opacity:.48;cursor:not-allowed}
+@media(max-width:560px){
+  .game-card-actions{grid-template-columns:1fr 1fr}
+}
