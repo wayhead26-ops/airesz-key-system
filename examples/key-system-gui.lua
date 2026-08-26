@@ -1,10 +1,15 @@
 --[[
-    Airesz Key System - Alternative GUI + Production Runtime
-    Auto login, saved key, auto re-key, protected script loading and session cleanup.
+    Airesz Key System - GUI Loader v6.1.1
+    Auto login, saved key, auto re-key, protected script loading,
+    Premium/Lifetime session awareness and session cleanup.
 ]]
 
 local WORKER_URL = "https://airesz-key-api.airesz-key-system.workers.dev"
-local AUTH_CLIENT_URL = "https://raw.githubusercontent.com/wayhead26-ops/airesz-key-system/main/examples/roblox-client.lua"
+local LOADER_VERSION = "6.1.1"
+local AUTH_CLIENT_URLS = {
+    "https://wayhead26-ops.github.io/airesz-key-system/roblox-client.lua",
+    "https://raw.githubusercontent.com/wayhead26-ops/airesz-key-system/main/roblox-client.lua"
+}
 local GET_KEY_URL = "https://wayhead26-ops.github.io/airesz-key-system/"
 local DISCORD_URL = "https://discord.gg/nAqMBZVbTK"
 
@@ -229,7 +234,7 @@ local BrandLetter = label(
 BrandLetter.TextXAlignment = Enum.TextXAlignment.Center
 
 label(Sidebar, "AIRESZ", UDim2.fromOffset(18, 72), UDim2.fromOffset(116, 20), Enum.Font.GothamBold, 15)
-label(Sidebar, "ACCESS PORTAL", UDim2.fromOffset(18, 91), UDim2.fromOffset(116, 16), Enum.Font.GothamBold, 8, COLORS.Muted)
+label(Sidebar, "ACCESS PORTAL • v" .. LOADER_VERSION, UDim2.fromOffset(18, 91), UDim2.fromOffset(116, 16), Enum.Font.GothamBold, 8, COLORS.Muted)
 
 local NavCard = Instance.new("Frame")
 NavCard.BackgroundColor3 = Color3.fromRGB(29, 25, 51)
@@ -659,6 +664,27 @@ local function getRemainingText(...)
     end
 end
 
+local function downloadAuthorizationClient()
+    local lastError = "Authorization client download failed."
+
+    for _, baseUrl in ipairs(AUTH_CLIENT_URLS) do
+        local cacheBuster = tostring(os.time()) .. tostring(math.random(1000, 9999))
+        local ok, source = pcall(function()
+            return game:HttpGet(baseUrl .. "?v=" .. cacheBuster, true)
+        end)
+
+        if ok and type(source) == "string" and source ~= "" then
+            return source, baseUrl
+        end
+
+        if not ok then
+            lastError = tostring(source or lastError)
+        end
+    end
+
+    error("Unable to download the latest authorization client: " .. lastError)
+end
+
 local function setVerifyBusy(value)
     verifying = value
     VerifyButtonText.Text = value and "VERIFYING..." or "VERIFY & CONTINUE"
@@ -723,8 +749,7 @@ local function verifyAndLoad(keyOverride, silentSavedKey)
         local verified = false
         local verificationCode = nil
         local ok, err = pcall(function()
-            local cacheBuster = tostring(os.time()) .. tostring(math.random(1000, 9999))
-            local source = game:HttpGet(AUTH_CLIENT_URL .. "?v=" .. cacheBuster, true)
+            local source = downloadAuthorizationClient()
             source = source:gsub("https://YOUR%-WORKER%.workers%.dev", WORKER_URL)
 
             local compileClient, compileError = loadstring(source)
@@ -772,7 +797,20 @@ local function verifyAndLoad(keyOverride, silentSavedKey)
 
             verified = true
             currentSession = session
-            local remainingText = getRemainingText(resultOrError, session)
+
+            local isPremium = false
+            if type(session.IsPremium) == "function" then
+                local premiumOk, premiumResult = pcall(function()
+                    return session:IsPremium()
+                end)
+                isPremium = premiumOk and premiumResult == true
+            elseif type(resultOrError) == "table" then
+                isPremium = resultOrError.premium == true
+            end
+
+            local remainingText = isPremium
+                and nil
+                or getRemainingText(resultOrError, session)
 
             if saveEnabled then
                 local saved, saveError = saveKey(key)
@@ -783,11 +821,15 @@ local function verifyAndLoad(keyOverride, silentSavedKey)
                 deleteSavedKey(false)
             end
 
-            SessionState.Text = "ACTIVE"
-            SessionState.TextColor3 = COLORS.Green
-            SessionText.Text = remainingText
-                and ("Key active • " .. remainingText .. " remaining")
-                or "Key active • session authorized"
+            SessionState.Text = isPremium and "PREMIUM" or "ACTIVE"
+            SessionState.TextColor3 = isPremium and Color3.fromRGB(181, 164, 255) or COLORS.Green
+            SessionText.Text = isPremium
+                and "Premium access • Lifetime"
+                or (
+                    remainingText
+                        and ("Key active • " .. remainingText .. " remaining")
+                        or "Key active • session authorized"
+                )
 
             if not silentSavedKey then
                 setStatus("Access granted • loading script...", "success")
@@ -805,9 +847,13 @@ local function verifyAndLoad(keyOverride, silentSavedKey)
 
             notify(
                 "Airesz Key System",
-                remainingText
-                    and ("Key active • " .. remainingText .. " remaining")
-                    or "Script loaded successfully."
+                isPremium
+                    and "Premium Lifetime access active • script loaded."
+                    or (
+                        remainingText
+                            and ("Key active • " .. remainingText .. " remaining")
+                            or "Script loaded successfully."
+                    )
             )
         end)
 
