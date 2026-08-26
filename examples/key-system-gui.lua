@@ -1,27 +1,82 @@
 --[[
-    Airesz Key System - GUI Loader v6.1.3
+    Airesz Key System - GUI Loader v6.1.4
     Auto login, saved key, auto re-key, protected script loading,
     Premium/Lifetime session awareness and session cleanup.
 ]]
 
 local WORKER_URL = "https://airesz-key-api.airesz-key-system.workers.dev"
-local LOADER_VERSION = "6.1.3"
+local LOADER_VERSION = "6.1.4"
 local AUTH_CLIENT_URLS = {
-    "https://raw.githubusercontent.com/wayhead26-ops/airesz-key-system/main/examples/roblox-client.lua?v=" .. os.time(),
-    "https://wayhead26-ops.github.io/airesz-key-system/examples/roblox-client.lua?v=" .. os.time()
+    "https://raw.githubusercontent.com/wayhead26-ops/airesz-key-system/main/examples/roblox-client.lua",
+    "https://wayhead26-ops.github.io/airesz-key-system/examples/roblox-client.lua"
 }
 local GET_KEY_URL = "https://wayhead26-ops.github.io/airesz-key-system/"
 local DISCORD_URL = "https://discord.gg/nAqMBZVbTK"
 
-local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local StarterGui = game:GetService("StarterGui")
+local Game = game
+local RuntimeEnv = type(getgenv) == "function" and getgenv() or _G
+
+local function readMember(object, name)
+    local ok, value = pcall(function()
+        return object and object[name]
+    end)
+    if ok then
+        return value
+    end
+    return nil
+end
+
+local function getServiceCompat(name)
+    local direct = readMember(Game, name)
+    if direct ~= nil then
+        return direct
+    end
+
+    local method = readMember(Game, "GetService")
+    if type(method) == "function" then
+        local ok, service = pcall(method, Game, name)
+        if ok and service ~= nil then
+            return service
+        end
+    end
+
+    error("[AIRESZ] Roblox service unavailable: " .. tostring(name))
+end
+
+local function httpGetCompat(url, noCache)
+    local method = readMember(Game, "HttpGet")
+    if type(method) == "function" then
+        local ok, body = pcall(method, Game, url, noCache == true)
+        if ok and type(body) == "string" and body ~= "" then
+            return body
+        end
+    end
+
+    local requestFn = request or http_request or (syn and syn.request)
+    if type(requestFn) == "function" then
+        local ok, response = pcall(requestFn, {
+            Url = url,
+            Method = "GET"
+        })
+        if ok and type(response) == "table" then
+            local body = response.Body or response.body
+            if type(body) == "string" and body ~= "" then
+                return body
+            end
+        end
+    end
+
+    error("[AIRESZ] HTTP GET is unavailable in this executor.")
+end
+
+local Players = getServiceCompat("Players")
+local TweenService = getServiceCompat("TweenService")
+local UserInputService = getServiceCompat("UserInputService")
+local StarterGui = getServiceCompat("StarterGui")
 local LocalPlayer = Players.LocalPlayer
 local KEY_FOLDER = "AireszHub"
 local KEY_FILE = KEY_FOLDER .. "/saved-key.txt"
 local FALLBACK_KEY_FILE = "AireszHub_saved-key.txt"
-local RuntimeEnv = type(getgenv) == "function" and getgenv() or _G
 
 -- Resolve Roblox globals from the real Roblox environment when an executor
 -- exposes incomplete proxy tables (for example RUDim2.new == nil).
@@ -130,9 +185,7 @@ local function getGuiParent()
         end
     end
 
-    local ok, coreGui = pcall(function()
-        return game:GetService("CoreGui")
-    end)
+    local ok, coreGui = pcall(getServiceCompat, "CoreGui")
     if ok and coreGui then
         return coreGui
     end
@@ -754,7 +807,7 @@ local function downloadAuthorizationClient()
     for _, baseUrl in ipairs(AUTH_CLIENT_URLS) do
         local cacheBuster = tostring(os.time()) .. tostring(math.random(1000, 9999))
         local ok, source = pcall(function()
-            return game:HttpGet(baseUrl .. "?v=" .. cacheBuster, true)
+            return httpGetCompat(baseUrl .. "?v=" .. cacheBuster, true)
         end)
 
         if ok and type(source) == "string" and source ~= "" then
