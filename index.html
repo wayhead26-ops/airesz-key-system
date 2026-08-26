@@ -102,7 +102,7 @@
 
         <div class="card-heading provider-heading">
           <span class="heading-icon">🔗</span>
-          <div><h2>Select a Provider</h2><p>The same provider will be used for every checkpoint.</p></div>
+          <div><h2>Select a Provider</h2><p>You can change provider later without losing verified checkpoint progress.</p></div>
         </div>
 
         <div class="providers" role="group" aria-label="Checkpoint provider">
@@ -125,7 +125,7 @@
 
         <div class="builder-actions">
           <button id="startBtn" class="primary-button" type="button"><span>▶</span> Start Checkpoint</button>
-          <button id="cancelBtn" class="danger-button hidden" type="button"><span>×</span> Cancel Session</button>
+          <button id="cancelBtn" class="danger-button hidden" type="button"><span>×</span> Cancel / Change Provider</button>
           <span id="routeState" class="route-state">Ready</span>
         </div>
         <p id="message" class="message" aria-live="polite"></p>
@@ -242,6 +242,6 @@
     })();
   </script>
   <script src="config.js?v=3.16.0"></script>
-  <script src="app.js?v=3.15.0"></script>
+  <script src="app.js?v=3.16.0"></script>
 </body>
 </html>

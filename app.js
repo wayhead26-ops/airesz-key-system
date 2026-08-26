@@ -8,6 +8,7 @@ const state = {
   provider: "linkvertise",
   providers: {},
   session: null,
+  pausedSession: null,
   clientToken: getClientToken(),
   busy: false,
   savedKeys: loadSavedKeys(),
@@ -900,8 +901,22 @@ async function discoverActiveSession() {
   const query = new URLSearchParams({ clientToken: state.clientToken });
   const data = await api(`/api/session/active?${query}`);
   if (!data.session) return false;
-  state.session = data.session;
   state.plan = data.session.plan;
+  if (data.session.paused || !data.session.provider) {
+    state.pausedSession = data.session;
+    state.session = null;
+    saveSession();
+    selectUi();
+    updateSelection();
+    updateControls();
+    const done = Number(data.session.completedSteps || 0);
+    setMessage(done > 0
+      ? `Route paused with ${done}/${data.session.requiredSteps} checkpoints kept. Choose another provider and press Start.`
+      : "Route paused. Choose a provider and press Start.", true);
+    return false;
+  }
+  state.pausedSession = null;
+  state.session = data.session;
   state.provider = data.session.provider;
   saveSession();
   selectUi();
@@ -922,6 +937,7 @@ async function startRoute() {
       body: { plan: state.plan, provider: state.provider, clientToken: state.clientToken }
     });
     state.session = data;
+    state.pausedSession = null;
     state.plan = data.plan;
     state.provider = data.provider;
     saveSession();
@@ -1042,26 +1058,48 @@ async function issueKey() {
   $("#startBtn").innerHTML = '<span>＋</span> Start Another Route';
   setMessage("Your access key has been generated successfully.", true);
   state.session = null;
+  state.pausedSession = null;
   saveSession();
   updateControls();
 }
 
 async function cancelRoute() {
   if (state.busy || !state.session) return;
-  const confirmed = window.confirm(`Cancel the ${state.plan} route through ${providerLabel()}? All checkpoint progress for this session will be lost.`);
+  const done = Number(state.session.completedSteps || 0);
+  const confirmed = window.confirm(
+    done > 0
+      ? `Pause this route and change provider? Your ${done}/${state.session.requiredSteps} verified checkpoints will be kept.`
+      : "Cancel this provider route and choose another provider?"
+  );
   if (!confirmed) return;
 
   state.busy = true;
   updateControls();
   try {
-    await api("/api/session/cancel", {
+    const data = await api("/api/session/cancel", {
       method: "POST",
       body: { sessionId: state.session.sessionId, clientToken: state.clientToken }
     });
+    const previous = state.session;
     resetRoute({ keepMessage: true });
-    setMessage("Route cancelled. You can choose a new plan and provider.", true);
+    state.plan = data.plan || previous.plan;
+    state.pausedSession = {
+      sessionId: previous.sessionId,
+      plan: state.plan,
+      provider: "",
+      completedSteps: Number(data.completedSteps ?? previous.completedSteps ?? 0),
+      requiredSteps: Number(data.requiredSteps ?? previous.requiredSteps ?? planSteps[state.plan]),
+      paused: true
+    };
+    selectUi();
+    updateSelection();
+    const kept = Number(state.pausedSession.completedSteps || 0);
+    setMessage(kept > 0
+      ? `Route paused · ${kept}/${state.pausedSession.requiredSteps} checkpoints kept. Choose another provider.`
+      : "Route cancelled. Choose another provider and press Start.", true);
   } catch (error) {
     if (isDeadSessionError(error)) {
+      state.pausedSession = null;
       resetRoute({ keepMessage: true });
       setMessage("The previous session has expired. You can choose a new route.", true);
     } else {
@@ -1075,6 +1113,11 @@ async function cancelRoute() {
 
 $$(".plan").forEach((button) => button.addEventListener("click", () => {
   if (state.busy || hasActiveSession()) return;
+  const kept = Number(state.pausedSession?.completedSteps || 0);
+  if (kept > 0 && button.dataset.plan !== state.pausedSession.plan) {
+    setMessage(`Checkpoint progress is kept on ${state.pausedSession.plan}. Choose a provider and resume that plan.`);
+    return;
+  }
   state.plan = button.dataset.plan;
   selectUi();
   updateSelection();
