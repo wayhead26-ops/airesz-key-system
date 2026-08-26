@@ -1,11 +1,11 @@
 --[[
-    Airesz Key System - GUI Loader v6.1.4
+    Airesz Key System - GUI Loader v6.1.5
     Auto login, saved key, auto re-key, protected script loading,
     Premium/Lifetime session awareness and session cleanup.
 ]]
 
 local WORKER_URL = "https://airesz-key-api.airesz-key-system.workers.dev"
-local LOADER_VERSION = "6.1.4"
+local LOADER_VERSION = "6.1.5"
 local AUTH_CLIENT_URLS = {
     "https://raw.githubusercontent.com/wayhead26-ops/airesz-key-system/main/examples/roblox-client.lua",
     "https://wayhead26-ops.github.io/airesz-key-system/examples/roblox-client.lua"
@@ -1135,3 +1135,54 @@ end)
 
 UserInputService.InputChanged:Connect(function(input)
     if dragging and (
+        input.UserInputType == REnum.UserInputType.MouseMovement
+        or input.UserInputType == REnum.UserInputType.Touch
+    ) then
+        local delta = input.Position - dragStart
+        Main.Position = RUDim2.new(
+            startPosition.X.Scale,
+            startPosition.X.Offset + delta.X,
+            startPosition.Y.Scale,
+            startPosition.Y.Offset + delta.Y
+        )
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == REnum.UserInputType.MouseButton1
+        or input.UserInputType == REnum.UserInputType.Touch
+    then
+        dragging = false
+    end
+end)
+
+local interfaceScale = RInstance.new("UIScale")
+interfaceScale.Parent = Main
+
+local Workspace = getServiceCompat("Workspace")
+
+local function updateScale()
+    local camera = Workspace.CurrentCamera
+    if not camera then
+        return
+    end
+
+    local viewport = camera.ViewportSize
+    interfaceScale.Scale = math.clamp(math.min(viewport.X / 620, viewport.Y / 500), 0.68, 1)
+end
+
+updateScale()
+if Workspace.CurrentCamera then
+    Workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScale)
+end
+
+setKeyVisible(true)
+setSaveEnabled(true)
+
+local savedKey = loadSavedKey()
+if savedKey ~= "" then
+    KeyBox.Text = savedKey
+    verifyAndLoad(savedKey, true)
+else
+    showKeyGui("Waiting for a key", "idle")
+end
