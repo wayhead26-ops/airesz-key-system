@@ -1,16 +1,51 @@
--- Airesz Roblox Client PREMIUM entitlement fix v6.1.1
+-- Airesz Roblox Client PREMIUM entitlement fix v6.1.2
 -- Fixes: Chat shows Premium but Premium game toggles say "Premium Required".
 -- Premium access is sourced from Worker `premium=true` and refreshed on heartbeat.
 -- Airesz v3.9.0 authorization client:
 -- maintenance heartbeat + multi-game auto update + protected-payload cleanup.
 local WORKER_URL = "https://airesz-key-api.airesz-key-system.workers.dev"
 
-local HttpService = game:GetService("HttpService")
-local Players = game:GetService("Players")
-local player = Players.LocalPlayer
+local Game = game
 local RuntimeEnv = type(getgenv) == "function" and getgenv() or _G
-local CLIENT_VERSION = "6.1.1"
-local EXECUTION_ID = HttpService:GenerateGUID(false)
+
+local function readMember(object, name)
+    local ok, value = pcall(function()
+        return object and object[name]
+    end)
+    if ok then
+        return value
+    end
+    return nil
+end
+
+local function getServiceCompat(name)
+    local direct = readMember(Game, name)
+    if direct ~= nil then
+        return direct
+    end
+
+    local method = readMember(Game, "GetService")
+    if type(method) == "function" then
+        local ok, service = pcall(method, Game, name)
+        if ok and service ~= nil then
+            return service
+        end
+    end
+
+    error("[AIRESZ] Roblox service unavailable: " .. tostring(name))
+end
+
+local function callMethod(object, name, ...)
+    local method = readMember(object, name)
+    assert(type(method) == "function", "[AIRESZ] Missing method: " .. tostring(name))
+    return method(object, ...)
+end
+
+local HttpService = getServiceCompat("HttpService")
+local Players = getServiceCompat("Players")
+local player = Players.LocalPlayer
+local CLIENT_VERSION = "6.1.2"
+local EXECUTION_ID = callMethod(HttpService, "GenerateGUID", false)
 
 local function getRequestFunction()
     return request or http_request or (syn and syn.request)
@@ -44,12 +79,12 @@ local function requestJson(path, payload)
         Url = WORKER_URL .. path,
         Method = "POST",
         Headers = { ["Content-Type"] = "application/json" },
-        Body = HttpService:JSONEncode(payload)
+        Body = callMethod(HttpService, "JSONEncode", payload)
     })
 
     local decoded = {}
     local ok = pcall(function()
-        decoded = HttpService:JSONDecode(response.Body or "{}")
+        decoded = callMethod(HttpService, "JSONDecode", response.Body or "{}")
     end)
     if not ok then
         decoded = { error = "The authorization server returned invalid JSON." }
@@ -277,7 +312,7 @@ local function startAireszSession(key, onBlocked)
             Url = WORKER_URL .. tostring(gameConfig.scriptEndpoint),
             Method = "POST",
             Headers = { ["Content-Type"] = "application/json" },
-            Body = HttpService:JSONEncode(payload)
+            Body = callMethod(HttpService, "JSONEncode", payload)
         })
 
         local downloadStatus = tonumber(response.StatusCode) or 0
@@ -285,7 +320,7 @@ local function startAireszSession(key, onBlocked)
         if downloadStatus ~= 200 then
             local message = "Auto update download failed."
             pcall(function()
-                local decoded = HttpService:JSONDecode(source)
+                local decoded = callMethod(HttpService, "JSONDecode", source)
                 message = decoded.error or message
             end)
             return nil, message
