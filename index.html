@@ -230,7 +230,18 @@
 
   <footer class="shell"><span>© 2026 Airesz. All rights reserved.</span><span>Games · Keys · Lifetime · Premium · Discord</span></footer>
 
+  <script>
+    // Linkvertise can return to this fixed GitHub Pages target with ?hash=... .
+    // Forward before loading cached application JS so Android checkpoint returns
+    // can never be skipped by a stale app.js response.
+    (() => {
+      const proof = new URLSearchParams(location.search).get("hash") || "";
+      if (/^[A-Za-z0-9]{64}$/.test(proof)) {
+        location.replace("https://airesz-key-api.airesz-key-system.workers.dev/api/provider/linkvertise/callback?hash=" + encodeURIComponent(proof));
+      }
+    })();
+  </script>
   <script src="config.js?v=3.16.0"></script>
-  <script src="app.js?v=3.14.1"></script>
+  <script src="app.js?v=3.15.0"></script>
 </body>
 </html>

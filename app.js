@@ -104,9 +104,11 @@ function renderKeyHistoryCard(item) {
   const resetButton = selfResetEligible && isActiveKey
     ? canResetNow
       ? `<button class="key-history-reset" type="button" data-reset-hwid data-key-id="${escapeHtml(item.id || "")}">↻ Reset HWID</button>`
-      : retryAfter > 0
-        ? `<button class="key-history-reset" type="button" disabled>↻ Cooldown ${escapeHtml(formatResetCooldown(retryAfter))}</button>`
-        : `<button class="key-history-reset" type="button" disabled>↻ Reset Limit Reached</button>`
+      : !hasResetAllowance
+        ? `<button class="key-history-reset" type="button" disabled>↻ All Resets Used</button>`
+        : retryAfter > 0
+          ? `<button class="key-history-reset" type="button" disabled>↻ Cooldown ${escapeHtml(formatResetCooldown(retryAfter))}</button>`
+          : `<button class="key-history-reset" type="button" disabled>↻ Reset Unavailable</button>`
     : "";
   const action = item.state === "deleted"
     ? '<span class="key-history-note">This key was deleted and is no longer active.</span>'
@@ -120,10 +122,10 @@ function renderKeyHistoryCard(item) {
   const resetMeta = !selfResetEligible
     ? ""
     : unlimitedResets
-      ? `<span>HWID Reset: Unlimited · shared across Web/App/Discord · 6h cooldown</span>`
+      ? `<span>HWID Reset: Unlimited · shared across Web/App/Discord · account-wide 6h cooldown</span>`
       : isFreeKey
-        ? `<span>HWID Reset: ${remainingResets == null ? "—" : remainingResets}/1 free reset · shared across Web/App/Discord</span>`
-        : `<span>HWID Reset: ${remainingResets == null ? "—" : remainingResets} remaining · shared across Web/App/Discord · 6h cooldown</span>`;
+        ? `<span>HWID Reset: ${remainingResets == null ? "—" : remainingResets}/1 free reset · shared across Web/App/Discord · account-wide 6h cooldown</span>`
+        : `<span>HWID Reset: ${remainingResets == null ? "—" : remainingResets} remaining · shared across Web/App/Discord · account-wide 6h cooldown</span>`;
   const keyTitle = item.source === "giveaway" ? "Giveaway Key" : item.plan ? `${item.plan} Key` : "Airesz Key";
   return `<article class="key-history-card ${cls} ${item.source === "giveaway" ? "giveaway" : ""}">
     <div class="key-history-top"><div><span class="key-state-pill ${cls}">${label}</span>${item.premium ? '<span class="premium-chip">💎 PREMIUM</span>' : ""}<strong>${keyTitle}</strong></div><span class="key-history-time">${item.expiresAt == null ? "Lifetime" : remainingText(item.expiresAt)}</span></div>
@@ -734,7 +736,7 @@ async function resetHwidFromWebsite(button = null, keyId = "") {
     loginWithDiscord();
     return;
   }
-  if (!confirm("Reset your Discord-linked HWID now? This uses the SAME reset allowance as the Android app and /resethwid on Discord. Free keys have 1 total reset, Lifetime is unlimited, and Giveaway keys use their configured limit. A successful reset starts a 6-hour cooldown.")) return;
+  if (!confirm("Reset your Discord-linked HWID now? This uses the SAME reset allowance as the Android app and /resethwid on Discord. Free keys have 1 total reset, Lifetime is unlimited, and Giveaway keys use their configured limit. A successful reset starts a 6-hour account-wide cooldown across all of your keys.")) return;
   if (button) { button.disabled = true; button.textContent = "Resetting…"; }
   try {
     const data = await api("/api/client/discord/reset-hwid-web", {
@@ -744,9 +746,9 @@ async function resetHwidFromWebsite(button = null, keyId = "") {
     const unlimited = data.maxResets == null;
     const remaining = unlimited ? "Unlimited" : String(data.resetsRemaining ?? 0);
     showToast(unlimited
-      ? "HWID reset successful ✓ · Unlimited resets · 6h cooldown started"
-      : `HWID reset successful ✓ · ${remaining} reset${remaining === "1" ? "" : "s"} remaining · 6h cooldown started`, true);
-    setMessage("HWID reset successfully. You can use the key on another device. The 6-hour self-reset cooldown is now active.", true);
+      ? "HWID reset successful ✓ · Unlimited resets · account-wide 6h cooldown started"
+      : `HWID reset successful ✓ · ${remaining} reset${remaining === "1" ? "" : "s"} remaining · account-wide 6h cooldown started`, true);
+    setMessage("HWID reset successfully. You can use the key on another device. The 6-hour account-wide self-reset cooldown is now active across all of your keys.", true);
     await loadMyKeys();
   } catch (error) {
     showToast(error?.message || "HWID reset failed.", false);
