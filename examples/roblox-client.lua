@@ -1,6 +1,8 @@
--- Airesz v6.1.1 authorization client:
--- maintenance heartbeat + multi-game auto update + protected-payload cleanup
--- + Premium session helper/state refresh.
+-- Airesz Roblox Client PREMIUM entitlement fix v6.1.1
+-- Fixes: Chat shows Premium but Premium game toggles say "Premium Required".
+-- Premium access is sourced from Worker `premium=true` and refreshed on heartbeat.
+-- Airesz v3.9.0 authorization client:
+-- maintenance heartbeat + multi-game auto update + protected-payload cleanup.
 local WORKER_URL = "https://airesz-key-api.airesz-key-system.workers.dev"
 
 local HttpService = game:GetService("HttpService")
@@ -106,8 +108,20 @@ local function startAireszSession(key, onBlocked)
         stopped = false,
         token = result.sessionToken,
         sessionId = result.sessionId,
+        identity = verifyPayload,
+        workerUrl = WORKER_URL,
         heartbeatSeconds = tonumber(result.heartbeatSeconds) or 30,
         verification = result,
+
+        -- Entitlement snapshot used by protected game scripts.
+        -- Keep both lowercase/uppercase aliases for compatibility with
+        -- older and newer Airesz payloads.
+        premium = result.premium == true,
+        Premium = result.premium == true,
+        plan = tostring(result.plan or ""),
+        Plan = tostring(result.plan or ""),
+        license = result.license,
+
         cleanupCallbacks = {},
         trackedConnections = {},
         trackedInstances = {},
@@ -124,14 +138,32 @@ local function startAireszSession(key, onBlocked)
         return self.allowed and not self.stopped
     end
 
+    -- Premium is a separate entitlement flag from the Lifetime plan.
+    -- A Lifetime key without premium remains non-Premium; a Lifetime +
+    -- Premium key returns true here.
     function session:IsPremium()
         if not self:IsAllowed() then
             return false
         end
 
-        local verification = self.verification
-        return type(verification) == "table"
-            and verification.premium == true
+        if self.premium == true or self.Premium == true then
+            return true
+        end
+
+        return type(self.verification) == "table"
+            and self.verification.premium == true
+    end
+
+    function session:GetPlan()
+        local value = self.plan or self.Plan
+        if value == nil or tostring(value) == "" then
+            value = self.verification and self.verification.plan
+        end
+        return value and tostring(value) or nil
+    end
+
+    function session:GetLicense()
+        return self.license or (self.verification and self.verification.license) or nil
     end
 
     function session:AssertAllowed()
@@ -143,12 +175,15 @@ local function startAireszSession(key, onBlocked)
         return self.verification and self.verification.game or nil
     end
 
+    -- Private game scripts use this to stop loops, disconnect events and close UI.
     function session:RegisterCleanup(callback)
         assert(type(callback) == "function", "RegisterCleanup expects a function.")
         table.insert(self.cleanupCallbacks, callback)
         return callback
     end
 
+    -- Connections registered by a protected payload are disconnected before
+    -- the payload UI is removed. This prevents old callbacks surviving re-key.
     function session:RegisterConnection(connection)
         assert(
             typeof(connection) == "RBXScriptConnection",
@@ -158,6 +193,7 @@ local function startAireszSession(key, onBlocked)
         return connection
     end
 
+    -- Optional helper for GUI or other instances owned by a protected payload.
     function session:TrackInstance(instance)
         assert(typeof(instance) == "Instance", "TrackInstance expects an Instance.")
         table.insert(self.trackedInstances, instance)
@@ -337,21 +373,35 @@ local function startAireszSession(key, onBlocked)
                 end
             elseif heartbeatStatus == 200 and heartbeat.allowed then
                 networkFailures = 0
-
                 if heartbeat.sessionToken then
                     session.token = tostring(heartbeat.sessionToken)
                 end
-
-                if heartbeat.premium ~= nil
-                    and type(session.verification) == "table" then
-                    session.verification.premium = heartbeat.premium == true
-                end
-
                 if tonumber(heartbeat.heartbeatSeconds) then
                     session.heartbeatSeconds = math.max(
                         5,
                         tonumber(heartbeat.heartbeatSeconds)
                     )
+                end
+
+                -- Keep the runtime entitlement snapshot synchronized with D1.
+                if heartbeat.premium ~= nil then
+                    local premium = heartbeat.premium == true
+                    session.premium = premium
+                    session.Premium = premium
+                    if type(session.verification) == "table" then
+                        session.verification.premium = premium
+                    end
+                end
+
+                if heartbeat.license ~= nil then
+                    session.license = heartbeat.license
+                    if type(session.verification) == "table" then
+                        session.verification.license = heartbeat.license
+                    end
+                end
+
+                if type(heartbeat.game) == "table" and type(session.verification) == "table" then
+                    session.verification.game = heartbeat.game
                 end
             elseif heartbeatStatus == 0 or heartbeatStatus >= 500 then
                 networkFailures = networkFailures + 1
