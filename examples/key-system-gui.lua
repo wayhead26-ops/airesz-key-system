@@ -7,8 +7,8 @@
 local WORKER_URL = "https://airesz-key-api.airesz-key-system.workers.dev"
 local LOADER_VERSION = "6.1.1"
 local AUTH_CLIENT_URLS = {
-    "https://wayhead26-ops.github.io/airesz-key-system/roblox-client.lua",
-    "https://raw.githubusercontent.com/wayhead26-ops/airesz-key-system/main/roblox-client.lua"
+    "https://raw.githubusercontent.com/wayhead26-ops/airesz-key-system/main/examples/roblox-client.lua?v=" .. os.time(),
+    "https://wayhead26-ops.github.io/airesz-key-system/examples/roblox-client.lua?v=" .. os.time()
 }
 local GET_KEY_URL = "https://wayhead26-ops.github.io/airesz-key-system/"
 local DISCORD_URL = "https://discord.gg/nAqMBZVbTK"
