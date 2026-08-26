@@ -1291,6 +1291,19 @@ async function handleStripeReturn() {
 
 (async function init() {
   const params = new URLSearchParams(location.search);
+
+  // A configured Linkvertise Target Link can finish on this public page and
+  // append its anti-bypass proof as ?hash=.... Forward that proof immediately
+  // to the first-party Worker callback. The Worker recovers the signed attempt
+  // from its HttpOnly cookie; Android attempts then receive the app-return bridge.
+  const linkvertiseHash = String(params.get("hash") || "").trim();
+  if (/^[A-Za-z0-9]{64}$/.test(linkvertiseHash)) {
+    const callback = new URL("/api/provider/linkvertise/callback", config.workerUrl);
+    callback.searchParams.set("hash", linkvertiseHash);
+    window.location.replace(callback.toString());
+    return;
+  }
+
   restoreSession();
   selectUi();
   updateSelection();
