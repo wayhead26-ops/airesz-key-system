@@ -1,11 +1,11 @@
 --[[
-    Airesz Key System - GUI Loader v6.1.1
+    Airesz Key System - GUI Loader v6.1.2
     Auto login, saved key, auto re-key, protected script loading,
     Premium/Lifetime session awareness and session cleanup.
 ]]
 
 local WORKER_URL = "https://airesz-key-api.airesz-key-system.workers.dev"
-local LOADER_VERSION = "6.1.1"
+local LOADER_VERSION = "6.1.2"
 local AUTH_CLIENT_URLS = {
     "https://raw.githubusercontent.com/wayhead26-ops/airesz-key-system/main/examples/roblox-client.lua?v=" .. os.time(),
     "https://wayhead26-ops.github.io/airesz-key-system/examples/roblox-client.lua?v=" .. os.time()
@@ -23,19 +23,33 @@ local KEY_FILE = KEY_FOLDER .. "/saved-key.txt"
 local FALLBACK_KEY_FILE = "AireszHub_saved-key.txt"
 local RuntimeEnv = type(getgenv) == "function" and getgenv() or _G
 
+-- Compatibility helpers for executors that do not expose convenience constructors
+-- such as Color3.fromRGB / UDim2.fromOffset / UDim2.fromScale.
+local function rgb(r, g, b)
+    return Color3.new(r / 255, g / 255, b / 255)
+end
+
+local function fromOffset(x, y)
+    return UDim2.new(0, x, 0, y)
+end
+
+local function fromScale(x, y)
+    return UDim2.new(x, 0, y, 0)
+end
+
 local COLORS = {
-    Background = Color3.fromRGB(8, 10, 17),
-    Panel = Color3.fromRGB(14, 17, 27),
-    Card = Color3.fromRGB(20, 24, 37),
-    CardHover = Color3.fromRGB(27, 32, 48),
-    Border = Color3.fromRGB(48, 56, 78),
-    Muted = Color3.fromRGB(125, 134, 158),
-    Text = Color3.fromRGB(238, 241, 250),
-    Purple = Color3.fromRGB(139, 92, 246),
-    Blue = Color3.fromRGB(53, 166, 255),
-    Green = Color3.fromRGB(52, 211, 153),
-    Yellow = Color3.fromRGB(251, 191, 36),
-    Red = Color3.fromRGB(251, 113, 133)
+    Background = rgb(8, 10, 17),
+    Panel = rgb(14, 17, 27),
+    Card = rgb(20, 24, 37),
+    CardHover = rgb(27, 32, 48),
+    Border = rgb(48, 56, 78),
+    Muted = rgb(125, 134, 158),
+    Text = rgb(238, 241, 250),
+    Purple = rgb(139, 92, 246),
+    Blue = rgb(53, 166, 255),
+    Green = rgb(52, 211, 153),
+    Yellow = rgb(251, 191, 36),
+    Red = rgb(251, 113, 133)
 }
 
 local function getGuiParent()
@@ -160,14 +174,14 @@ local Backdrop = Instance.new("Frame")
 Backdrop.BackgroundColor3 = COLORS.Background
 Backdrop.BackgroundTransparency = 0.18
 Backdrop.BorderSizePixel = 0
-Backdrop.Size = UDim2.fromScale(1, 1)
+Backdrop.Size = fromScale(1, 1)
 Backdrop.Parent = ScreenGui
 
 local backdropGradient = Instance.new("UIGradient")
 backdropGradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(7, 8, 15)),
-    ColorSequenceKeypoint.new(0.55, Color3.fromRGB(19, 12, 35)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(7, 20, 30))
+    ColorSequenceKeypoint.new(0, rgb(7, 8, 15)),
+    ColorSequenceKeypoint.new(0.55, rgb(19, 12, 35)),
+    ColorSequenceKeypoint.new(1, rgb(7, 20, 30))
 })
 backdropGradient.Rotation = 30
 backdropGradient.Parent = Backdrop
@@ -175,11 +189,11 @@ backdropGradient.Parent = Backdrop
 local Main = Instance.new("Frame")
 Main.Name = "Main"
 Main.AnchorPoint = Vector2.new(0.5, 0.5)
-Main.BackgroundColor3 = Color3.fromRGB(104, 117, 255)
+Main.BackgroundColor3 = rgb(104, 117, 255)
 Main.BorderSizePixel = 0
 Main.ClipsDescendants = true
-Main.Position = UDim2.fromScale(0.5, 0.5)
-Main.Size = UDim2.fromOffset(560, 440)
+Main.Position = fromScale(0.5, 0.5)
+Main.Size = fromOffset(560, 440)
 Main.Parent = ScreenGui
 corner(Main, 18)
 
@@ -188,13 +202,13 @@ Surface.Name = "Surface"
 Surface.BackgroundColor3 = COLORS.Panel
 Surface.BorderSizePixel = 0
 Surface.ClipsDescendants = true
-Surface.Position = UDim2.fromOffset(2, 2)
+Surface.Position = fromOffset(2, 2)
 Surface.Size = UDim2.new(1, -4, 1, -4)
 Surface.Parent = Main
 corner(Surface, 16)
 
 local Sidebar = Instance.new("Frame")
-Sidebar.BackgroundColor3 = Color3.fromRGB(17, 17, 30)
+Sidebar.BackgroundColor3 = rgb(17, 17, 30)
 Sidebar.BorderSizePixel = 0
 Sidebar.ClipsDescendants = true
 Sidebar.Size = UDim2.new(0, 152, 1, 0)
@@ -204,18 +218,18 @@ corner(Sidebar, 16)
 local SidebarSquareFill = Instance.new("Frame")
 SidebarSquareFill.BackgroundColor3 = Sidebar.BackgroundColor3
 SidebarSquareFill.BorderSizePixel = 0
-SidebarSquareFill.Position = UDim2.fromOffset(16, 0)
+SidebarSquareFill.Position = fromOffset(16, 0)
 SidebarSquareFill.Size = UDim2.new(1, -16, 1, 0)
 SidebarSquareFill.Parent = Sidebar
 
 local BrandIcon = Instance.new("Frame")
 BrandIcon.BackgroundColor3 = COLORS.Purple
 BrandIcon.BorderSizePixel = 0
-BrandIcon.Position = UDim2.fromOffset(18, 20)
-BrandIcon.Size = UDim2.fromOffset(40, 40)
+BrandIcon.Position = fromOffset(18, 20)
+BrandIcon.Size = fromOffset(40, 40)
 BrandIcon.Parent = Sidebar
 corner(BrandIcon, 12)
-stroke(BrandIcon, Color3.fromRGB(185, 164, 255), 0.2, 1)
+stroke(BrandIcon, rgb(185, 164, 255), 0.2, 1)
 
 local iconGradient = Instance.new("UIGradient")
 iconGradient.Color = ColorSequence.new(COLORS.Purple, COLORS.Blue)
@@ -225,21 +239,21 @@ iconGradient.Parent = BrandIcon
 local BrandLetter = label(
     BrandIcon,
     "A",
-    UDim2.fromScale(0, 0),
-    UDim2.fromScale(1, 1),
+    fromScale(0, 0),
+    fromScale(1, 1),
     Enum.Font.GothamBold,
     20,
     Color3.new(1, 1, 1)
 )
 BrandLetter.TextXAlignment = Enum.TextXAlignment.Center
 
-label(Sidebar, "AIRESZ", UDim2.fromOffset(18, 72), UDim2.fromOffset(116, 20), Enum.Font.GothamBold, 15)
-label(Sidebar, "ACCESS PORTAL • v" .. LOADER_VERSION, UDim2.fromOffset(18, 91), UDim2.fromOffset(116, 16), Enum.Font.GothamBold, 8, COLORS.Muted)
+label(Sidebar, "AIRESZ", fromOffset(18, 72), fromOffset(116, 20), Enum.Font.GothamBold, 15)
+label(Sidebar, "ACCESS PORTAL • v" .. LOADER_VERSION, fromOffset(18, 91), fromOffset(116, 16), Enum.Font.GothamBold, 8, COLORS.Muted)
 
 local NavCard = Instance.new("Frame")
-NavCard.BackgroundColor3 = Color3.fromRGB(29, 25, 51)
+NavCard.BackgroundColor3 = rgb(29, 25, 51)
 NavCard.BorderSizePixel = 0
-NavCard.Position = UDim2.fromOffset(12, 132)
+NavCard.Position = fromOffset(12, 132)
 NavCard.Size = UDim2.new(1, -24, 0, 42)
 NavCard.Parent = Sidebar
 corner(NavCard, 10)
@@ -248,16 +262,16 @@ stroke(NavCard, COLORS.Purple, 0.5, 1)
 local NavAccent = Instance.new("Frame")
 NavAccent.BackgroundColor3 = COLORS.Purple
 NavAccent.BorderSizePixel = 0
-NavAccent.Position = UDim2.fromOffset(0, 9)
-NavAccent.Size = UDim2.fromOffset(3, 24)
+NavAccent.Position = fromOffset(0, 9)
+NavAccent.Size = fromOffset(3, 24)
 NavAccent.Parent = NavCard
 corner(NavAccent, 3)
 
-label(NavCard, "◇", UDim2.fromOffset(12, 0), UDim2.fromOffset(22, 42), Enum.Font.GothamBold, 14, Color3.fromRGB(180, 163, 255))
-label(NavCard, "License", UDim2.fromOffset(37, 0), UDim2.new(1, -42, 1, 0), Enum.Font.GothamSemibold, 11)
+label(NavCard, "◇", fromOffset(12, 0), fromOffset(22, 42), Enum.Font.GothamBold, 14, rgb(180, 163, 255))
+label(NavCard, "License", fromOffset(37, 0), UDim2.new(1, -42, 1, 0), Enum.Font.GothamSemibold, 11)
 
 local SideStatus = Instance.new("Frame")
-SideStatus.BackgroundColor3 = Color3.fromRGB(16, 35, 32)
+SideStatus.BackgroundColor3 = rgb(16, 35, 32)
 SideStatus.BorderSizePixel = 0
 SideStatus.Position = UDim2.new(0, 12, 1, -82)
 SideStatus.Size = UDim2.new(1, -24, 0, 54)
@@ -268,13 +282,13 @@ stroke(SideStatus, COLORS.Green, 0.65, 1)
 local LiveDot = Instance.new("Frame")
 LiveDot.BackgroundColor3 = COLORS.Green
 LiveDot.BorderSizePixel = 0
-LiveDot.Position = UDim2.fromOffset(12, 13)
-LiveDot.Size = UDim2.fromOffset(8, 8)
+LiveDot.Position = fromOffset(12, 13)
+LiveDot.Size = fromOffset(8, 8)
 LiveDot.Parent = SideStatus
 corner(LiveDot, 8)
 
-label(SideStatus, "SYSTEM ONLINE", UDim2.fromOffset(27, 7), UDim2.new(1, -34, 0, 20), Enum.Font.GothamBold, 9, COLORS.Green)
-label(SideStatus, "All services ready", UDim2.fromOffset(12, 28), UDim2.new(1, -20, 0, 16), Enum.Font.Gotham, 8, COLORS.Muted)
+label(SideStatus, "SYSTEM ONLINE", fromOffset(27, 7), UDim2.new(1, -34, 0, 20), Enum.Font.GothamBold, 9, COLORS.Green)
+label(SideStatus, "All services ready", fromOffset(12, 28), UDim2.new(1, -20, 0, 16), Enum.Font.Gotham, 8, COLORS.Muted)
 
 TweenService:Create(
     LiveDot,
@@ -284,19 +298,19 @@ TweenService:Create(
 
 local Header = Instance.new("Frame")
 Header.BackgroundTransparency = 1
-Header.Position = UDim2.fromOffset(152, 0)
+Header.Position = fromOffset(152, 0)
 Header.Size = UDim2.new(1, -152, 0, 70)
 Header.Parent = Surface
 
-label(Header, "License verification", UDim2.fromOffset(22, 13), UDim2.new(1, -120, 0, 24), Enum.Font.GothamBold, 17)
-label(Header, "Enter your access key to continue", UDim2.fromOffset(22, 38), UDim2.new(1, -120, 0, 18), Enum.Font.Gotham, 10, COLORS.Muted)
+label(Header, "License verification", fromOffset(22, 13), UDim2.new(1, -120, 0, 24), Enum.Font.GothamBold, 17)
+label(Header, "Enter your access key to continue", fromOffset(22, 38), UDim2.new(1, -120, 0, 18), Enum.Font.Gotham, 10, COLORS.Muted)
 
-local MinimizeButton = button(Header, "Minimize", "—", UDim2.new(1, -74, 0, 18), UDim2.fromOffset(26, 26), Color3.fromRGB(27, 31, 45))
-local CloseButton = button(Header, "Close", "×", UDim2.new(1, -40, 0, 18), UDim2.fromOffset(26, 26), Color3.fromRGB(27, 31, 45))
+local MinimizeButton = button(Header, "Minimize", "—", UDim2.new(1, -74, 0, 18), fromOffset(26, 26), rgb(27, 31, 45))
+local CloseButton = button(Header, "Close", "×", UDim2.new(1, -40, 0, 18), fromOffset(26, 26), rgb(27, 31, 45))
 
 local Content = Instance.new("Frame")
 Content.BackgroundTransparency = 1
-Content.Position = UDim2.fromOffset(174, 72)
+Content.Position = fromOffset(174, 72)
 Content.Size = UDim2.new(1, -196, 1, -92)
 Content.Parent = Surface
 
@@ -308,12 +322,12 @@ KeyCard.Parent = Content
 corner(KeyCard, 13)
 stroke(KeyCard, COLORS.Border, 0.28, 1)
 
-label(KeyCard, "YOUR LICENSE KEY", UDim2.fromOffset(14, 11), UDim2.new(1, -28, 0, 18), Enum.Font.GothamBold, 9, Color3.fromRGB(166, 174, 200))
+label(KeyCard, "YOUR LICENSE KEY", fromOffset(14, 11), UDim2.new(1, -28, 0, 18), Enum.Font.GothamBold, 9, rgb(166, 174, 200))
 
 local InputHolder = Instance.new("Frame")
-InputHolder.BackgroundColor3 = Color3.fromRGB(13, 16, 26)
+InputHolder.BackgroundColor3 = rgb(13, 16, 26)
 InputHolder.BorderSizePixel = 0
-InputHolder.Position = UDim2.fromOffset(14, 36)
+InputHolder.Position = fromOffset(14, 36)
 InputHolder.Size = UDim2.new(1, -28, 0, 48)
 InputHolder.Parent = KeyCard
 corner(InputHolder, 10)
@@ -323,9 +337,9 @@ local KeyBox = Instance.new("TextBox")
 KeyBox.BackgroundTransparency = 1
 KeyBox.ClearTextOnFocus = false
 KeyBox.Font = Enum.Font.Code
-KeyBox.PlaceholderColor3 = Color3.fromRGB(83, 92, 116)
+KeyBox.PlaceholderColor3 = rgb(83, 92, 116)
 KeyBox.PlaceholderText = "AIRESZ-XXXX-XXXX-XXXX"
-KeyBox.Position = UDim2.fromOffset(13, 0)
+KeyBox.Position = fromOffset(13, 0)
 KeyBox.Size = UDim2.new(1, -98, 1, 0)
 KeyBox.Text = ""
 KeyBox.TextColor3 = COLORS.Text
@@ -333,26 +347,26 @@ KeyBox.TextSize = 12
 KeyBox.TextXAlignment = Enum.TextXAlignment.Left
 KeyBox.Parent = InputHolder
 
-local EyeButton = button(InputHolder, "ShowHide", "HIDE", UDim2.new(1, -76, 0, 8), UDim2.fromOffset(62, 32), Color3.fromRGB(29, 34, 50))
+local EyeButton = button(InputHolder, "ShowHide", "HIDE", UDim2.new(1, -76, 0, 8), fromOffset(62, 32), rgb(29, 34, 50))
 EyeButton.TextSize = 9
 
 local HelperDot = Instance.new("Frame")
 HelperDot.BackgroundColor3 = COLORS.Muted
 HelperDot.BorderSizePixel = 0
-HelperDot.Position = UDim2.fromOffset(15, 97)
-HelperDot.Size = UDim2.fromOffset(6, 6)
+HelperDot.Position = fromOffset(15, 97)
+HelperDot.Size = fromOffset(6, 6)
 HelperDot.Parent = KeyCard
 corner(HelperDot, 6)
 
-local StatusText = label(KeyCard, "Waiting for your key", UDim2.fromOffset(28, 89), UDim2.new(1, -42, 0, 20), Enum.Font.Gotham, 9, COLORS.Muted)
+local StatusText = label(KeyCard, "Waiting for your key", fromOffset(28, 89), UDim2.new(1, -42, 0, 20), Enum.Font.Gotham, 9, COLORS.Muted)
 
 local ActionRow = Instance.new("Frame")
 ActionRow.BackgroundTransparency = 1
-ActionRow.Position = UDim2.fromOffset(0, 126)
+ActionRow.Position = fromOffset(0, 126)
 ActionRow.Size = UDim2.new(1, 0, 0, 46)
 ActionRow.Parent = Content
 
-local GetKeyButton = button(ActionRow, "GetKey", "GET KEY", UDim2.fromOffset(0, 0), UDim2.new(0.36, -5, 1, 0), Color3.fromRGB(27, 31, 46))
+local GetKeyButton = button(ActionRow, "GetKey", "GET KEY", fromOffset(0, 0), UDim2.new(0.36, -5, 1, 0), rgb(27, 31, 46))
 local VerifyButton = button(ActionRow, "Verify", "VERIFY & CONTINUE", UDim2.new(0.36, 5, 0, 0), UDim2.new(0.64, -5, 1, 0), COLORS.Purple)
 VerifyButton.Text = ""
 
@@ -364,11 +378,11 @@ verifyGradient.Parent = VerifyButton
 local VerifyButtonText = label(
     VerifyButton,
     "VERIFY & CONTINUE",
-    UDim2.fromScale(0, 0),
-    UDim2.fromScale(1, 1),
+    fromScale(0, 0),
+    fromScale(1, 1),
     Enum.Font.GothamSemibold,
     11,
-    Color3.fromRGB(255, 255, 255)
+    rgb(255, 255, 255)
 )
 VerifyButtonText.TextXAlignment = Enum.TextXAlignment.Center
 VerifyButtonText.ZIndex = VerifyButton.ZIndex + 1
@@ -376,46 +390,46 @@ VerifyButtonText.ZIndex = VerifyButton.ZIndex + 1
 local SessionCard = Instance.new("Frame")
 SessionCard.BackgroundColor3 = COLORS.Card
 SessionCard.BorderSizePixel = 0
-SessionCard.Position = UDim2.fromOffset(0, 182)
+SessionCard.Position = fromOffset(0, 182)
 SessionCard.Size = UDim2.new(1, 0, 0, 64)
 SessionCard.Parent = Content
 corner(SessionCard, 12)
 stroke(SessionCard, COLORS.Border, 0.35, 1)
 
 local SessionIcon = Instance.new("Frame")
-SessionIcon.BackgroundColor3 = Color3.fromRGB(39, 34, 61)
+SessionIcon.BackgroundColor3 = rgb(39, 34, 61)
 SessionIcon.BorderSizePixel = 0
-SessionIcon.Position = UDim2.fromOffset(12, 12)
-SessionIcon.Size = UDim2.fromOffset(40, 40)
+SessionIcon.Position = fromOffset(12, 12)
+SessionIcon.Size = fromOffset(40, 40)
 SessionIcon.Parent = SessionCard
 corner(SessionIcon, 10)
 
-local SessionGlyph = label(SessionIcon, "◆", UDim2.fromScale(0, 0), UDim2.fromScale(1, 1), Enum.Font.GothamBold, 14, Color3.fromRGB(181, 164, 255))
+local SessionGlyph = label(SessionIcon, "◆", fromScale(0, 0), fromScale(1, 1), Enum.Font.GothamBold, 14, rgb(181, 164, 255))
 SessionGlyph.TextXAlignment = Enum.TextXAlignment.Center
 
-label(SessionCard, "License status", UDim2.fromOffset(63, 10), UDim2.new(1, -175, 0, 19), Enum.Font.GothamSemibold, 11)
-local SessionText = label(SessionCard, "Verify to view expiry information", UDim2.fromOffset(63, 31), UDim2.new(1, -76, 0, 17), Enum.Font.Gotham, 9, COLORS.Muted)
-local SessionState = label(SessionCard, "UNVERIFIED", UDim2.new(1, -112, 0, 10), UDim2.fromOffset(98, 19), Enum.Font.GothamBold, 9, COLORS.Yellow)
+label(SessionCard, "License status", fromOffset(63, 10), UDim2.new(1, -175, 0, 19), Enum.Font.GothamSemibold, 11)
+local SessionText = label(SessionCard, "Verify to view expiry information", fromOffset(63, 31), UDim2.new(1, -76, 0, 17), Enum.Font.Gotham, 9, COLORS.Muted)
+local SessionState = label(SessionCard, "UNVERIFIED", UDim2.new(1, -112, 0, 10), fromOffset(98, 19), Enum.Font.GothamBold, 9, COLORS.Yellow)
 SessionState.TextXAlignment = Enum.TextXAlignment.Right
 
 local SaveRow = Instance.new("Frame")
 SaveRow.BackgroundColor3 = COLORS.Card
 SaveRow.BorderSizePixel = 0
-SaveRow.Position = UDim2.fromOffset(0, 256)
+SaveRow.Position = fromOffset(0, 256)
 SaveRow.Size = UDim2.new(1, 0, 0, 48)
 SaveRow.Parent = Content
 corner(SaveRow, 11)
 stroke(SaveRow, COLORS.Border, 0.4, 1)
 
-label(SaveRow, "Remember this key", UDim2.fromOffset(13, 5), UDim2.new(1, -95, 0, 20), Enum.Font.GothamSemibold, 10)
-label(SaveRow, "Auto-login when you execute again", UDim2.fromOffset(13, 23), UDim2.new(1, -95, 0, 17), Enum.Font.Gotham, 8, COLORS.Muted)
+label(SaveRow, "Remember this key", fromOffset(13, 5), UDim2.new(1, -95, 0, 20), Enum.Font.GothamSemibold, 10)
+label(SaveRow, "Auto-login when you execute again", fromOffset(13, 23), UDim2.new(1, -95, 0, 17), Enum.Font.Gotham, 8, COLORS.Muted)
 
 local SaveToggle = Instance.new("TextButton")
 SaveToggle.AutoButtonColor = false
 SaveToggle.BackgroundColor3 = COLORS.Purple
 SaveToggle.BorderSizePixel = 0
 SaveToggle.Position = UDim2.new(1, -58, 0, 12)
-SaveToggle.Size = UDim2.fromOffset(44, 24)
+SaveToggle.Size = fromOffset(44, 24)
 SaveToggle.Text = ""
 SaveToggle.Parent = SaveRow
 corner(SaveToggle, 12)
@@ -425,20 +439,20 @@ ToggleKnob.AnchorPoint = Vector2.new(0.5, 0.5)
 ToggleKnob.BackgroundColor3 = Color3.new(1, 1, 1)
 ToggleKnob.BorderSizePixel = 0
 ToggleKnob.Position = UDim2.new(1, -12, 0.5, 0)
-ToggleKnob.Size = UDim2.fromOffset(18, 18)
+ToggleKnob.Size = fromOffset(18, 18)
 ToggleKnob.Parent = SaveToggle
 corner(ToggleKnob, 9)
 
 local BottomRow = Instance.new("Frame")
 BottomRow.BackgroundTransparency = 1
-BottomRow.Position = UDim2.fromOffset(0, 314)
+BottomRow.Position = fromOffset(0, 314)
 BottomRow.Size = UDim2.new(1, 0, 0, 38)
 BottomRow.Parent = Content
 
-local DiscordButton = button(BottomRow, "Discord", "COPY DISCORD", UDim2.fromOffset(0, 0), UDim2.new(0.5, -5, 1, 0), Color3.fromRGB(27, 31, 46))
-DiscordButton.TextColor3 = Color3.fromRGB(181, 190, 255)
-local ResetButton = button(BottomRow, "Reset", "RESET KEY", UDim2.new(0.5, 5, 0, 0), UDim2.new(0.5, -5, 1, 0), Color3.fromRGB(45, 25, 35))
-ResetButton.TextColor3 = Color3.fromRGB(255, 151, 173)
+local DiscordButton = button(BottomRow, "Discord", "COPY DISCORD", fromOffset(0, 0), UDim2.new(0.5, -5, 1, 0), rgb(27, 31, 46))
+DiscordButton.TextColor3 = rgb(181, 190, 255)
+local ResetButton = button(BottomRow, "Reset", "RESET KEY", UDim2.new(0.5, 5, 0, 0), UDim2.new(0.5, -5, 1, 0), rgb(45, 25, 35))
+ResetButton.TextColor3 = rgb(255, 151, 173)
 
 local saveEnabled = true
 local keyVisible = true
@@ -513,7 +527,7 @@ end
 local function setSaveEnabled(value)
     saveEnabled = value
     TweenService:Create(SaveToggle, TweenInfo.new(0.18), {
-        BackgroundColor3 = value and COLORS.Purple or Color3.fromRGB(47, 53, 69)
+        BackgroundColor3 = value and COLORS.Purple or rgb(47, 53, 69)
     }):Play()
     TweenService:Create(ToggleKnob, TweenInfo.new(0.18, Enum.EasingStyle.Quart), {
         Position = value and UDim2.new(1, -12, 0.5, 0) or UDim2.new(0, 12, 0.5, 0)
@@ -707,9 +721,9 @@ local function showKeyGui(message, state)
     ScreenGui.Enabled = true
     Sidebar.Visible = true
     Content.Visible = true
-    Header.Position = UDim2.fromOffset(152, 0)
+    Header.Position = fromOffset(152, 0)
     Header.Size = UDim2.new(1, -152, 0, 70)
-    Main.Size = UDim2.fromOffset(560, 440)
+    Main.Size = fromOffset(560, 440)
     MinimizeButton.Text = "—"
     minimized = false
     setVerifyBusy(false)
@@ -822,7 +836,7 @@ local function verifyAndLoad(keyOverride, silentSavedKey)
             end
 
             SessionState.Text = isPremium and "PREMIUM" or "ACTIVE"
-            SessionState.TextColor3 = isPremium and Color3.fromRGB(181, 164, 255) or COLORS.Green
+            SessionState.TextColor3 = isPremium and rgb(181, 164, 255) or COLORS.Green
             SessionText.Text = isPremium
                 and "Premium access • Lifetime"
                 or (
@@ -942,22 +956,22 @@ ResetButton.MouseButton1Click:Connect(function()
     notify("Airesz Key System", "Saved key removed.")
 end)
 
-addInteraction(GetKeyButton, Color3.fromRGB(27, 31, 46), COLORS.CardHover)
-addInteraction(DiscordButton, Color3.fromRGB(27, 31, 46), COLORS.CardHover)
-addInteraction(ResetButton, Color3.fromRGB(45, 25, 35), Color3.fromRGB(65, 31, 45))
-addInteraction(EyeButton, Color3.fromRGB(29, 34, 50), Color3.fromRGB(42, 49, 70))
-addInteraction(MinimizeButton, Color3.fromRGB(27, 31, 45), COLORS.CardHover)
-addInteraction(CloseButton, Color3.fromRGB(27, 31, 45), Color3.fromRGB(67, 31, 44))
+addInteraction(GetKeyButton, rgb(27, 31, 46), COLORS.CardHover)
+addInteraction(DiscordButton, rgb(27, 31, 46), COLORS.CardHover)
+addInteraction(ResetButton, rgb(45, 25, 35), rgb(65, 31, 45))
+addInteraction(EyeButton, rgb(29, 34, 50), rgb(42, 49, 70))
+addInteraction(MinimizeButton, rgb(27, 31, 45), COLORS.CardHover)
+addInteraction(CloseButton, rgb(27, 31, 45), rgb(67, 31, 44))
 
 MinimizeButton.MouseButton1Click:Connect(function()
     minimized = not minimized
     Sidebar.Visible = not minimized
     Content.Visible = not minimized
-    Header.Position = minimized and UDim2.fromOffset(0, 0) or UDim2.fromOffset(152, 0)
+    Header.Position = minimized and fromOffset(0, 0) or fromOffset(152, 0)
     Header.Size = minimized and UDim2.new(1, 0, 0, 70) or UDim2.new(1, -152, 0, 70)
     MinimizeButton.Text = minimized and "+" or "—"
     TweenService:Create(Main, TweenInfo.new(0.2, Enum.EasingStyle.Quart), {
-        Size = minimized and UDim2.fromOffset(408, 74) or UDim2.fromOffset(560, 440)
+        Size = minimized and fromOffset(408, 74) or fromOffset(560, 440)
     }):Play()
 end)
 
