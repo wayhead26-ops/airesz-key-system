@@ -116,11 +116,14 @@ function renderKeyHistoryCard(item) {
       ? `<div class="key-history-action-group"><button class="key-history-copy" type="button" data-key="${encodeURIComponent(item.key)}">Copy Key</button>${resetButton}</div>`
       : '<span class="key-history-note">Enter the key below to recover.</span>';
 
+  const isFreeKey = String(item.source || "").toLowerCase() === "free";
   const resetMeta = !selfResetEligible
     ? ""
     : unlimitedResets
-      ? `<span>HWID Reset: Unlimited · 6h cooldown</span>`
-      : `<span>HWID Reset: ${remainingResets == null ? "—" : remainingResets} remaining · 6h cooldown</span>`;
+      ? `<span>HWID Reset: Unlimited · shared across Web/App/Discord · 6h cooldown</span>`
+      : isFreeKey
+        ? `<span>HWID Reset: ${remainingResets == null ? "—" : remainingResets}/1 free reset · shared across Web/App/Discord</span>`
+        : `<span>HWID Reset: ${remainingResets == null ? "—" : remainingResets} remaining · shared across Web/App/Discord · 6h cooldown</span>`;
   const keyTitle = item.source === "giveaway" ? "Giveaway Key" : item.plan ? `${item.plan} Key` : "Airesz Key";
   return `<article class="key-history-card ${cls} ${item.source === "giveaway" ? "giveaway" : ""}">
     <div class="key-history-top"><div><span class="key-state-pill ${cls}">${label}</span>${item.premium ? '<span class="premium-chip">💎 PREMIUM</span>' : ""}<strong>${keyTitle}</strong></div><span class="key-history-time">${item.expiresAt == null ? "Lifetime" : remainingText(item.expiresAt)}</span></div>
@@ -731,10 +734,13 @@ async function resetHwidFromWebsite(button = null, keyId = "") {
     loginWithDiscord();
     return;
   }
-  if (!confirm("Reset your Discord-linked HWID now? A successful reset starts a 6-hour cooldown. Lifetime keys have unlimited resets; temporary/giveaway keys keep their configured reset allowance.")) return;
+  if (!confirm("Reset your Discord-linked HWID now? This uses the SAME reset allowance as the Android app and /resethwid on Discord. Free keys have 1 total reset, Lifetime is unlimited, and Giveaway keys use their configured limit. A successful reset starts a 6-hour cooldown.")) return;
   if (button) { button.disabled = true; button.textContent = "Resetting…"; }
   try {
-    const data = await api("/api/client/discord/reset-hwid-web", { method: "POST", body: { keyId: keyId || undefined } });
+    const data = await api("/api/client/discord/reset-hwid-web", {
+      method: "POST",
+      body: { keyId: keyId || undefined, clientToken: state.clientToken }
+    });
     const unlimited = data.maxResets == null;
     const remaining = unlimited ? "Unlimited" : String(data.resetsRemaining ?? 0);
     showToast(unlimited
@@ -1312,6 +1318,11 @@ async function handleStripeReturn() {
     // Refresh countdown/state labels without re-fetching, so "Expiring Soon"
     // changes automatically when an active key crosses the 12-hour threshold.
     window.setInterval(() => renderMyKeys(), 60 * 1000);
+    // Pull fresh server counters so a reset performed in Android or Discord
+    // appears here without the user pressing Refresh.
+    window.setInterval(() => {
+      if (!document.hidden) loadMyKeys().catch(() => {});
+    }, 15 * 1000);
     await handleStripeReturn();
     if (!state.session) await discoverActiveSession();
     if (state.session) {
