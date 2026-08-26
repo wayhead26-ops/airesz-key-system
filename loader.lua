@@ -1,35 +1,19 @@
--- Airesz Script Hub public loader
--- Usage: getgenv().AIRESZ_KEY = "YOUR-KEY"; then run the copied loadstring.
-local RuntimeEnv = type(getgenv) == "function" and getgenv() or _G
-local key = RuntimeEnv.AIRESZ_KEY
-if type(key) ~= "string" or key == "" then
-    error("[AIRESZ] Set getgenv().AIRESZ_KEY to your valid Airesz key before running the loader.")
-end
+-- Airesz Key System GUI bootstrap
+-- Loads the known-good GUI Loader v6.1.1, which then downloads the latest roblox-client.lua.
 
-local CLIENT_URL = "https://wayhead26-ops.github.io/airesz-key-system/roblox-client.lua"
+local GUI_LOADER_URL = "https://raw.githubusercontent.com/wayhead26-ops/airesz-key-system/26481c10231b7f4bcbc97dcc17e8f727e40df24a/examples/key-system-gui.lua"
+
 local ok, source = pcall(function()
-    return game:HttpGet(CLIENT_URL, true)
+    return game:HttpGet(GUI_LOADER_URL, true)
 end)
+
 if not ok or type(source) ~= "string" or source == "" then
-    error("[AIRESZ] Unable to download the authorization client.")
+    error("[AIRESZ] Unable to download the Key System GUI.")
 end
 
-local compileOk, startAireszSession = pcall(function()
-    return assert(loadstring(source), "Authorization client could not compile.")
-end)
-if not compileOk or type(startAireszSession) ~= "function" then
-    error("[AIRESZ] Authorization client could not compile.")
+local chunk, compileError = loadstring(source)
+if not chunk then
+    error("[AIRESZ] Key System GUI compile failed: " .. tostring(compileError))
 end
 
-local session, resultOrError = startAireszSession(key, function(reason)
-    warn("[AIRESZ] Protected script stopped:", reason)
-end)
-if not session then
-    error(tostring(resultOrError or "Airesz authorization failed."))
-end
-
-local loaded, loadError = session:LoadLatestScript()
-if not loaded then
-    session:Stop()
-    error(tostring(loadError or "Airesz script failed to load."))
-end
+return chunk()
