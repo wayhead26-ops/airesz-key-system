@@ -1,11 +1,11 @@
 --[[
-    Airesz Key System - GUI Loader v6.1.2
+    Airesz Key System - GUI Loader v6.1.3
     Auto login, saved key, auto re-key, protected script loading,
     Premium/Lifetime session awareness and session cleanup.
 ]]
 
 local WORKER_URL = "https://airesz-key-api.airesz-key-system.workers.dev"
-local LOADER_VERSION = "6.1.2"
+local LOADER_VERSION = "6.1.3"
 local AUTH_CLIENT_URLS = {
     "https://raw.githubusercontent.com/wayhead26-ops/airesz-key-system/main/examples/roblox-client.lua?v=" .. os.time(),
     "https://wayhead26-ops.github.io/airesz-key-system/examples/roblox-client.lua?v=" .. os.time()
@@ -23,18 +23,88 @@ local KEY_FILE = KEY_FOLDER .. "/saved-key.txt"
 local FALLBACK_KEY_FILE = "AireszHub_saved-key.txt"
 local RuntimeEnv = type(getgenv) == "function" and getgenv() or _G
 
+-- Resolve Roblox globals from the real Roblox environment when an executor
+-- exposes incomplete proxy tables (for example RUDim2.new == nil).
+local function resolveRobloxGlobal(name, requiredMember)
+    local candidates = {}
+
+    if type(getrenv) == "function" then
+        local ok, env = pcall(getrenv)
+        if ok and type(env) == "table" then
+            table.insert(candidates, env)
+        end
+    end
+
+    if type(getfenv) == "function" then
+        local ok, env = pcall(getfenv, 0)
+        if ok and type(env) == "table" then
+            table.insert(candidates, env)
+        end
+    end
+
+    if type(RuntimeEnv) == "table" then
+        table.insert(candidates, RuntimeEnv)
+    end
+
+    if type(_G) == "table" then
+        table.insert(candidates, _G)
+    end
+
+    for _, env in ipairs(candidates) do
+        local ok, value = pcall(function()
+            return env[name]
+        end)
+
+        if ok and value ~= nil then
+            if requiredMember == nil then
+                return value
+            end
+
+            local okMember, member = pcall(function()
+                return value[requiredMember]
+            end)
+
+            if okMember and type(member) == "function" then
+                return value
+            end
+        end
+    end
+
+    return nil
+end
+
+local RColor3 = resolveRobloxGlobal("Color3", "new")
+local RUDim2 = resolveRobloxGlobal("UDim2", "new")
+local RUDim = resolveRobloxGlobal("UDim", "new")
+local RVector2 = resolveRobloxGlobal("Vector2", "new")
+local RTweenInfo = resolveRobloxGlobal("TweenInfo", "new")
+local RColorSequence = resolveRobloxGlobal("ColorSequence", "new")
+local RColorSequenceKeypoint = resolveRobloxGlobal("ColorSequenceKeypoint", "new")
+local RInstance = resolveRobloxGlobal("Instance", "new")
+local REnum = resolveRobloxGlobal("Enum")
+
+assert(RColor3, "[AIRESZ] Color3 constructor is unavailable in this executor.")
+assert(RUDim2, "[AIRESZ] UDim2 constructor is unavailable in this executor.")
+assert(RUDim, "[AIRESZ] UDim constructor is unavailable in this executor.")
+assert(RVector2, "[AIRESZ] Vector2 constructor is unavailable in this executor.")
+assert(RTweenInfo, "[AIRESZ] TweenInfo constructor is unavailable in this executor.")
+assert(RColorSequence, "[AIRESZ] ColorSequence constructor is unavailable in this executor.")
+assert(RColorSequenceKeypoint, "[AIRESZ] ColorSequenceKeypoint constructor is unavailable in this executor.")
+assert(RInstance, "[AIRESZ] Instance constructor is unavailable in this executor.")
+assert(REnum, "[AIRESZ] Enum is unavailable in this executor.")
+
 -- Compatibility helpers for executors that do not expose convenience constructors
 -- such as Color3.fromRGB / UDim2.fromOffset / UDim2.fromScale.
 local function rgb(r, g, b)
-    return Color3.new(r / 255, g / 255, b / 255)
+    return RColor3.new(r / 255, g / 255, b / 255)
 end
 
 local function fromOffset(x, y)
-    return UDim2.new(0, x, 0, y)
+    return RUDim2.new(0, x, 0, y)
 end
 
 local function fromScale(x, y)
-    return UDim2.new(x, 0, y, 0)
+    return RUDim2.new(x, 0, y, 0)
 end
 
 local COLORS = {
@@ -71,14 +141,14 @@ local function getGuiParent()
 end
 
 local function corner(parent, radius)
-    local object = Instance.new("UICorner")
-    object.CornerRadius = UDim.new(0, radius)
+    local object = RInstance.new("UICorner")
+    object.CornerRadius = RUDim.new(0, radius)
     object.Parent = parent
     return object
 end
 
 local function stroke(parent, color, transparency, thickness)
-    local object = Instance.new("UIStroke")
+    local object = RInstance.new("UIStroke")
     object.Color = color
     object.Transparency = transparency or 0
     object.Thickness = thickness or 1
@@ -87,26 +157,26 @@ local function stroke(parent, color, transparency, thickness)
 end
 
 local function label(parent, text, position, size, font, textSize, color)
-    local object = Instance.new("TextLabel")
+    local object = RInstance.new("TextLabel")
     object.BackgroundTransparency = 1
-    object.Font = font or Enum.Font.Gotham
+    object.Font = font or REnum.Font.Gotham
     object.Position = position
     object.Size = size
     object.Text = text
     object.TextColor3 = color or COLORS.Text
     object.TextSize = textSize or 12
-    object.TextXAlignment = Enum.TextXAlignment.Left
+    object.TextXAlignment = REnum.TextXAlignment.Left
     object.Parent = parent
     return object
 end
 
 local function button(parent, name, text, position, size, color)
-    local object = Instance.new("TextButton")
+    local object = RInstance.new("TextButton")
     object.Name = name
     object.AutoButtonColor = false
     object.BackgroundColor3 = color or COLORS.Card
     object.BorderSizePixel = 0
-    object.Font = Enum.Font.GothamSemibold
+    object.Font = REnum.Font.GothamSemibold
     object.Position = position
     object.Size = size
     object.Text = text
@@ -119,30 +189,30 @@ local function button(parent, name, text, position, size, color)
 end
 
 local function addInteraction(object, normalColor, hoverColor)
-    local scale = Instance.new("UIScale")
+    local scale = RInstance.new("UIScale")
     scale.Parent = object
 
     object.MouseEnter:Connect(function()
-        TweenService:Create(object, TweenInfo.new(0.14), {
+        TweenService:Create(object, RTweenInfo.new(0.14), {
             BackgroundColor3 = hoverColor
         }):Play()
     end)
 
     object.MouseLeave:Connect(function()
-        TweenService:Create(object, TweenInfo.new(0.14), {
+        TweenService:Create(object, RTweenInfo.new(0.14), {
             BackgroundColor3 = normalColor
         }):Play()
-        TweenService:Create(scale, TweenInfo.new(0.1), {Scale = 1}):Play()
+        TweenService:Create(scale, RTweenInfo.new(0.1), {Scale = 1}):Play()
     end)
 
     object.MouseButton1Down:Connect(function()
-        TweenService:Create(scale, TweenInfo.new(0.08), {Scale = 0.97}):Play()
+        TweenService:Create(scale, RTweenInfo.new(0.08), {Scale = 0.97}):Play()
     end)
 
     object.MouseButton1Up:Connect(function()
         TweenService:Create(
             scale,
-            TweenInfo.new(0.12, Enum.EasingStyle.Back),
+            RTweenInfo.new(0.12, REnum.EasingStyle.Back),
             {Scale = 1}
         ):Play()
     end)
@@ -161,34 +231,34 @@ if previous then
     previous:Destroy()
 end
 
-local ScreenGui = Instance.new("ScreenGui")
+local ScreenGui = RInstance.new("ScreenGui")
 ScreenGui.Name = "AireszKeyAlternative"
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.ResetOnSpawn = false
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.ZIndexBehavior = REnum.ZIndexBehavior.Sibling
 ScreenGui.Enabled = false
 ScreenGui.Parent = guiParent
 RuntimeEnv.AIRESZ_KEY_GUI = ScreenGui
 
-local Backdrop = Instance.new("Frame")
+local Backdrop = RInstance.new("Frame")
 Backdrop.BackgroundColor3 = COLORS.Background
 Backdrop.BackgroundTransparency = 0.18
 Backdrop.BorderSizePixel = 0
 Backdrop.Size = fromScale(1, 1)
 Backdrop.Parent = ScreenGui
 
-local backdropGradient = Instance.new("UIGradient")
-backdropGradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, rgb(7, 8, 15)),
-    ColorSequenceKeypoint.new(0.55, rgb(19, 12, 35)),
-    ColorSequenceKeypoint.new(1, rgb(7, 20, 30))
+local backdropGradient = RInstance.new("UIGradient")
+backdropGradient.Color = RColorSequence.new({
+    RColorSequenceKeypoint.new(0, rgb(7, 8, 15)),
+    RColorSequenceKeypoint.new(0.55, rgb(19, 12, 35)),
+    RColorSequenceKeypoint.new(1, rgb(7, 20, 30))
 })
 backdropGradient.Rotation = 30
 backdropGradient.Parent = Backdrop
 
-local Main = Instance.new("Frame")
+local Main = RInstance.new("Frame")
 Main.Name = "Main"
-Main.AnchorPoint = Vector2.new(0.5, 0.5)
+Main.AnchorPoint = RVector2.new(0.5, 0.5)
 Main.BackgroundColor3 = rgb(104, 117, 255)
 Main.BorderSizePixel = 0
 Main.ClipsDescendants = true
@@ -197,32 +267,32 @@ Main.Size = fromOffset(560, 440)
 Main.Parent = ScreenGui
 corner(Main, 18)
 
-local Surface = Instance.new("Frame")
+local Surface = RInstance.new("Frame")
 Surface.Name = "Surface"
 Surface.BackgroundColor3 = COLORS.Panel
 Surface.BorderSizePixel = 0
 Surface.ClipsDescendants = true
 Surface.Position = fromOffset(2, 2)
-Surface.Size = UDim2.new(1, -4, 1, -4)
+Surface.Size = RUDim2.new(1, -4, 1, -4)
 Surface.Parent = Main
 corner(Surface, 16)
 
-local Sidebar = Instance.new("Frame")
+local Sidebar = RInstance.new("Frame")
 Sidebar.BackgroundColor3 = rgb(17, 17, 30)
 Sidebar.BorderSizePixel = 0
 Sidebar.ClipsDescendants = true
-Sidebar.Size = UDim2.new(0, 152, 1, 0)
+Sidebar.Size = RUDim2.new(0, 152, 1, 0)
 Sidebar.Parent = Surface
 corner(Sidebar, 16)
 
-local SidebarSquareFill = Instance.new("Frame")
+local SidebarSquareFill = RInstance.new("Frame")
 SidebarSquareFill.BackgroundColor3 = Sidebar.BackgroundColor3
 SidebarSquareFill.BorderSizePixel = 0
 SidebarSquareFill.Position = fromOffset(16, 0)
-SidebarSquareFill.Size = UDim2.new(1, -16, 1, 0)
+SidebarSquareFill.Size = RUDim2.new(1, -16, 1, 0)
 SidebarSquareFill.Parent = Sidebar
 
-local BrandIcon = Instance.new("Frame")
+local BrandIcon = RInstance.new("Frame")
 BrandIcon.BackgroundColor3 = COLORS.Purple
 BrandIcon.BorderSizePixel = 0
 BrandIcon.Position = fromOffset(18, 20)
@@ -231,8 +301,8 @@ BrandIcon.Parent = Sidebar
 corner(BrandIcon, 12)
 stroke(BrandIcon, rgb(185, 164, 255), 0.2, 1)
 
-local iconGradient = Instance.new("UIGradient")
-iconGradient.Color = ColorSequence.new(COLORS.Purple, COLORS.Blue)
+local iconGradient = RInstance.new("UIGradient")
+iconGradient.Color = RColorSequence.new(COLORS.Purple, COLORS.Blue)
 iconGradient.Rotation = 40
 iconGradient.Parent = BrandIcon
 
@@ -241,25 +311,25 @@ local BrandLetter = label(
     "A",
     fromScale(0, 0),
     fromScale(1, 1),
-    Enum.Font.GothamBold,
+    REnum.Font.GothamBold,
     20,
-    Color3.new(1, 1, 1)
+    RColor3.new(1, 1, 1)
 )
-BrandLetter.TextXAlignment = Enum.TextXAlignment.Center
+BrandLetter.TextXAlignment = REnum.TextXAlignment.Center
 
-label(Sidebar, "AIRESZ", fromOffset(18, 72), fromOffset(116, 20), Enum.Font.GothamBold, 15)
-label(Sidebar, "ACCESS PORTAL • v" .. LOADER_VERSION, fromOffset(18, 91), fromOffset(116, 16), Enum.Font.GothamBold, 8, COLORS.Muted)
+label(Sidebar, "AIRESZ", fromOffset(18, 72), fromOffset(116, 20), REnum.Font.GothamBold, 15)
+label(Sidebar, "ACCESS PORTAL • v" .. LOADER_VERSION, fromOffset(18, 91), fromOffset(116, 16), REnum.Font.GothamBold, 8, COLORS.Muted)
 
-local NavCard = Instance.new("Frame")
+local NavCard = RInstance.new("Frame")
 NavCard.BackgroundColor3 = rgb(29, 25, 51)
 NavCard.BorderSizePixel = 0
 NavCard.Position = fromOffset(12, 132)
-NavCard.Size = UDim2.new(1, -24, 0, 42)
+NavCard.Size = RUDim2.new(1, -24, 0, 42)
 NavCard.Parent = Sidebar
 corner(NavCard, 10)
 stroke(NavCard, COLORS.Purple, 0.5, 1)
 
-local NavAccent = Instance.new("Frame")
+local NavAccent = RInstance.new("Frame")
 NavAccent.BackgroundColor3 = COLORS.Purple
 NavAccent.BorderSizePixel = 0
 NavAccent.Position = fromOffset(0, 9)
@@ -267,19 +337,19 @@ NavAccent.Size = fromOffset(3, 24)
 NavAccent.Parent = NavCard
 corner(NavAccent, 3)
 
-label(NavCard, "◇", fromOffset(12, 0), fromOffset(22, 42), Enum.Font.GothamBold, 14, rgb(180, 163, 255))
-label(NavCard, "License", fromOffset(37, 0), UDim2.new(1, -42, 1, 0), Enum.Font.GothamSemibold, 11)
+label(NavCard, "◇", fromOffset(12, 0), fromOffset(22, 42), REnum.Font.GothamBold, 14, rgb(180, 163, 255))
+label(NavCard, "License", fromOffset(37, 0), RUDim2.new(1, -42, 1, 0), REnum.Font.GothamSemibold, 11)
 
-local SideStatus = Instance.new("Frame")
+local SideStatus = RInstance.new("Frame")
 SideStatus.BackgroundColor3 = rgb(16, 35, 32)
 SideStatus.BorderSizePixel = 0
-SideStatus.Position = UDim2.new(0, 12, 1, -82)
-SideStatus.Size = UDim2.new(1, -24, 0, 54)
+SideStatus.Position = RUDim2.new(0, 12, 1, -82)
+SideStatus.Size = RUDim2.new(1, -24, 0, 54)
 SideStatus.Parent = Sidebar
 corner(SideStatus, 11)
 stroke(SideStatus, COLORS.Green, 0.65, 1)
 
-local LiveDot = Instance.new("Frame")
+local LiveDot = RInstance.new("Frame")
 LiveDot.BackgroundColor3 = COLORS.Green
 LiveDot.BorderSizePixel = 0
 LiveDot.Position = fromOffset(12, 13)
@@ -287,70 +357,70 @@ LiveDot.Size = fromOffset(8, 8)
 LiveDot.Parent = SideStatus
 corner(LiveDot, 8)
 
-label(SideStatus, "SYSTEM ONLINE", fromOffset(27, 7), UDim2.new(1, -34, 0, 20), Enum.Font.GothamBold, 9, COLORS.Green)
-label(SideStatus, "All services ready", fromOffset(12, 28), UDim2.new(1, -20, 0, 16), Enum.Font.Gotham, 8, COLORS.Muted)
+label(SideStatus, "SYSTEM ONLINE", fromOffset(27, 7), RUDim2.new(1, -34, 0, 20), REnum.Font.GothamBold, 9, COLORS.Green)
+label(SideStatus, "All services ready", fromOffset(12, 28), RUDim2.new(1, -20, 0, 16), REnum.Font.Gotham, 8, COLORS.Muted)
 
 TweenService:Create(
     LiveDot,
-    TweenInfo.new(0.9, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+    RTweenInfo.new(0.9, REnum.EasingStyle.Sine, REnum.EasingDirection.InOut, -1, true),
     {BackgroundTransparency = 0.65}
 ):Play()
 
-local Header = Instance.new("Frame")
+local Header = RInstance.new("Frame")
 Header.BackgroundTransparency = 1
 Header.Position = fromOffset(152, 0)
-Header.Size = UDim2.new(1, -152, 0, 70)
+Header.Size = RUDim2.new(1, -152, 0, 70)
 Header.Parent = Surface
 
-label(Header, "License verification", fromOffset(22, 13), UDim2.new(1, -120, 0, 24), Enum.Font.GothamBold, 17)
-label(Header, "Enter your access key to continue", fromOffset(22, 38), UDim2.new(1, -120, 0, 18), Enum.Font.Gotham, 10, COLORS.Muted)
+label(Header, "License verification", fromOffset(22, 13), RUDim2.new(1, -120, 0, 24), REnum.Font.GothamBold, 17)
+label(Header, "Enter your access key to continue", fromOffset(22, 38), RUDim2.new(1, -120, 0, 18), REnum.Font.Gotham, 10, COLORS.Muted)
 
-local MinimizeButton = button(Header, "Minimize", "—", UDim2.new(1, -74, 0, 18), fromOffset(26, 26), rgb(27, 31, 45))
-local CloseButton = button(Header, "Close", "×", UDim2.new(1, -40, 0, 18), fromOffset(26, 26), rgb(27, 31, 45))
+local MinimizeButton = button(Header, "Minimize", "—", RUDim2.new(1, -74, 0, 18), fromOffset(26, 26), rgb(27, 31, 45))
+local CloseButton = button(Header, "Close", "×", RUDim2.new(1, -40, 0, 18), fromOffset(26, 26), rgb(27, 31, 45))
 
-local Content = Instance.new("Frame")
+local Content = RInstance.new("Frame")
 Content.BackgroundTransparency = 1
 Content.Position = fromOffset(174, 72)
-Content.Size = UDim2.new(1, -196, 1, -92)
+Content.Size = RUDim2.new(1, -196, 1, -92)
 Content.Parent = Surface
 
-local KeyCard = Instance.new("Frame")
+local KeyCard = RInstance.new("Frame")
 KeyCard.BackgroundColor3 = COLORS.Card
 KeyCard.BorderSizePixel = 0
-KeyCard.Size = UDim2.new(1, 0, 0, 116)
+KeyCard.Size = RUDim2.new(1, 0, 0, 116)
 KeyCard.Parent = Content
 corner(KeyCard, 13)
 stroke(KeyCard, COLORS.Border, 0.28, 1)
 
-label(KeyCard, "YOUR LICENSE KEY", fromOffset(14, 11), UDim2.new(1, -28, 0, 18), Enum.Font.GothamBold, 9, rgb(166, 174, 200))
+label(KeyCard, "YOUR LICENSE KEY", fromOffset(14, 11), RUDim2.new(1, -28, 0, 18), REnum.Font.GothamBold, 9, rgb(166, 174, 200))
 
-local InputHolder = Instance.new("Frame")
+local InputHolder = RInstance.new("Frame")
 InputHolder.BackgroundColor3 = rgb(13, 16, 26)
 InputHolder.BorderSizePixel = 0
 InputHolder.Position = fromOffset(14, 36)
-InputHolder.Size = UDim2.new(1, -28, 0, 48)
+InputHolder.Size = RUDim2.new(1, -28, 0, 48)
 InputHolder.Parent = KeyCard
 corner(InputHolder, 10)
 local inputStroke = stroke(InputHolder, COLORS.Border, 0.2, 1)
 
-local KeyBox = Instance.new("TextBox")
+local KeyBox = RInstance.new("TextBox")
 KeyBox.BackgroundTransparency = 1
 KeyBox.ClearTextOnFocus = false
-KeyBox.Font = Enum.Font.Code
+KeyBox.Font = REnum.Font.Code
 KeyBox.PlaceholderColor3 = rgb(83, 92, 116)
 KeyBox.PlaceholderText = "AIRESZ-XXXX-XXXX-XXXX"
 KeyBox.Position = fromOffset(13, 0)
-KeyBox.Size = UDim2.new(1, -98, 1, 0)
+KeyBox.Size = RUDim2.new(1, -98, 1, 0)
 KeyBox.Text = ""
 KeyBox.TextColor3 = COLORS.Text
 KeyBox.TextSize = 12
-KeyBox.TextXAlignment = Enum.TextXAlignment.Left
+KeyBox.TextXAlignment = REnum.TextXAlignment.Left
 KeyBox.Parent = InputHolder
 
-local EyeButton = button(InputHolder, "ShowHide", "HIDE", UDim2.new(1, -76, 0, 8), fromOffset(62, 32), rgb(29, 34, 50))
+local EyeButton = button(InputHolder, "ShowHide", "HIDE", RUDim2.new(1, -76, 0, 8), fromOffset(62, 32), rgb(29, 34, 50))
 EyeButton.TextSize = 9
 
-local HelperDot = Instance.new("Frame")
+local HelperDot = RInstance.new("Frame")
 HelperDot.BackgroundColor3 = COLORS.Muted
 HelperDot.BorderSizePixel = 0
 HelperDot.Position = fromOffset(15, 97)
@@ -358,20 +428,20 @@ HelperDot.Size = fromOffset(6, 6)
 HelperDot.Parent = KeyCard
 corner(HelperDot, 6)
 
-local StatusText = label(KeyCard, "Waiting for your key", fromOffset(28, 89), UDim2.new(1, -42, 0, 20), Enum.Font.Gotham, 9, COLORS.Muted)
+local StatusText = label(KeyCard, "Waiting for your key", fromOffset(28, 89), RUDim2.new(1, -42, 0, 20), REnum.Font.Gotham, 9, COLORS.Muted)
 
-local ActionRow = Instance.new("Frame")
+local ActionRow = RInstance.new("Frame")
 ActionRow.BackgroundTransparency = 1
 ActionRow.Position = fromOffset(0, 126)
-ActionRow.Size = UDim2.new(1, 0, 0, 46)
+ActionRow.Size = RUDim2.new(1, 0, 0, 46)
 ActionRow.Parent = Content
 
-local GetKeyButton = button(ActionRow, "GetKey", "GET KEY", fromOffset(0, 0), UDim2.new(0.36, -5, 1, 0), rgb(27, 31, 46))
-local VerifyButton = button(ActionRow, "Verify", "VERIFY & CONTINUE", UDim2.new(0.36, 5, 0, 0), UDim2.new(0.64, -5, 1, 0), COLORS.Purple)
+local GetKeyButton = button(ActionRow, "GetKey", "GET KEY", fromOffset(0, 0), RUDim2.new(0.36, -5, 1, 0), rgb(27, 31, 46))
+local VerifyButton = button(ActionRow, "Verify", "VERIFY & CONTINUE", RUDim2.new(0.36, 5, 0, 0), RUDim2.new(0.64, -5, 1, 0), COLORS.Purple)
 VerifyButton.Text = ""
 
-local verifyGradient = Instance.new("UIGradient")
-verifyGradient.Color = ColorSequence.new(COLORS.Purple, COLORS.Blue)
+local verifyGradient = RInstance.new("UIGradient")
+verifyGradient.Color = RColorSequence.new(COLORS.Purple, COLORS.Blue)
 verifyGradient.Rotation = 15
 verifyGradient.Parent = VerifyButton
 
@@ -380,23 +450,23 @@ local VerifyButtonText = label(
     "VERIFY & CONTINUE",
     fromScale(0, 0),
     fromScale(1, 1),
-    Enum.Font.GothamSemibold,
+    REnum.Font.GothamSemibold,
     11,
     rgb(255, 255, 255)
 )
-VerifyButtonText.TextXAlignment = Enum.TextXAlignment.Center
+VerifyButtonText.TextXAlignment = REnum.TextXAlignment.Center
 VerifyButtonText.ZIndex = VerifyButton.ZIndex + 1
 
-local SessionCard = Instance.new("Frame")
+local SessionCard = RInstance.new("Frame")
 SessionCard.BackgroundColor3 = COLORS.Card
 SessionCard.BorderSizePixel = 0
 SessionCard.Position = fromOffset(0, 182)
-SessionCard.Size = UDim2.new(1, 0, 0, 64)
+SessionCard.Size = RUDim2.new(1, 0, 0, 64)
 SessionCard.Parent = Content
 corner(SessionCard, 12)
 stroke(SessionCard, COLORS.Border, 0.35, 1)
 
-local SessionIcon = Instance.new("Frame")
+local SessionIcon = RInstance.new("Frame")
 SessionIcon.BackgroundColor3 = rgb(39, 34, 61)
 SessionIcon.BorderSizePixel = 0
 SessionIcon.Position = fromOffset(12, 12)
@@ -404,54 +474,54 @@ SessionIcon.Size = fromOffset(40, 40)
 SessionIcon.Parent = SessionCard
 corner(SessionIcon, 10)
 
-local SessionGlyph = label(SessionIcon, "◆", fromScale(0, 0), fromScale(1, 1), Enum.Font.GothamBold, 14, rgb(181, 164, 255))
-SessionGlyph.TextXAlignment = Enum.TextXAlignment.Center
+local SessionGlyph = label(SessionIcon, "◆", fromScale(0, 0), fromScale(1, 1), REnum.Font.GothamBold, 14, rgb(181, 164, 255))
+SessionGlyph.TextXAlignment = REnum.TextXAlignment.Center
 
-label(SessionCard, "License status", fromOffset(63, 10), UDim2.new(1, -175, 0, 19), Enum.Font.GothamSemibold, 11)
-local SessionText = label(SessionCard, "Verify to view expiry information", fromOffset(63, 31), UDim2.new(1, -76, 0, 17), Enum.Font.Gotham, 9, COLORS.Muted)
-local SessionState = label(SessionCard, "UNVERIFIED", UDim2.new(1, -112, 0, 10), fromOffset(98, 19), Enum.Font.GothamBold, 9, COLORS.Yellow)
-SessionState.TextXAlignment = Enum.TextXAlignment.Right
+label(SessionCard, "License status", fromOffset(63, 10), RUDim2.new(1, -175, 0, 19), REnum.Font.GothamSemibold, 11)
+local SessionText = label(SessionCard, "Verify to view expiry information", fromOffset(63, 31), RUDim2.new(1, -76, 0, 17), REnum.Font.Gotham, 9, COLORS.Muted)
+local SessionState = label(SessionCard, "UNVERIFIED", RUDim2.new(1, -112, 0, 10), fromOffset(98, 19), REnum.Font.GothamBold, 9, COLORS.Yellow)
+SessionState.TextXAlignment = REnum.TextXAlignment.Right
 
-local SaveRow = Instance.new("Frame")
+local SaveRow = RInstance.new("Frame")
 SaveRow.BackgroundColor3 = COLORS.Card
 SaveRow.BorderSizePixel = 0
 SaveRow.Position = fromOffset(0, 256)
-SaveRow.Size = UDim2.new(1, 0, 0, 48)
+SaveRow.Size = RUDim2.new(1, 0, 0, 48)
 SaveRow.Parent = Content
 corner(SaveRow, 11)
 stroke(SaveRow, COLORS.Border, 0.4, 1)
 
-label(SaveRow, "Remember this key", fromOffset(13, 5), UDim2.new(1, -95, 0, 20), Enum.Font.GothamSemibold, 10)
-label(SaveRow, "Auto-login when you execute again", fromOffset(13, 23), UDim2.new(1, -95, 0, 17), Enum.Font.Gotham, 8, COLORS.Muted)
+label(SaveRow, "Remember this key", fromOffset(13, 5), RUDim2.new(1, -95, 0, 20), REnum.Font.GothamSemibold, 10)
+label(SaveRow, "Auto-login when you execute again", fromOffset(13, 23), RUDim2.new(1, -95, 0, 17), REnum.Font.Gotham, 8, COLORS.Muted)
 
-local SaveToggle = Instance.new("TextButton")
+local SaveToggle = RInstance.new("TextButton")
 SaveToggle.AutoButtonColor = false
 SaveToggle.BackgroundColor3 = COLORS.Purple
 SaveToggle.BorderSizePixel = 0
-SaveToggle.Position = UDim2.new(1, -58, 0, 12)
+SaveToggle.Position = RUDim2.new(1, -58, 0, 12)
 SaveToggle.Size = fromOffset(44, 24)
 SaveToggle.Text = ""
 SaveToggle.Parent = SaveRow
 corner(SaveToggle, 12)
 
-local ToggleKnob = Instance.new("Frame")
-ToggleKnob.AnchorPoint = Vector2.new(0.5, 0.5)
-ToggleKnob.BackgroundColor3 = Color3.new(1, 1, 1)
+local ToggleKnob = RInstance.new("Frame")
+ToggleKnob.AnchorPoint = RVector2.new(0.5, 0.5)
+ToggleKnob.BackgroundColor3 = RColor3.new(1, 1, 1)
 ToggleKnob.BorderSizePixel = 0
-ToggleKnob.Position = UDim2.new(1, -12, 0.5, 0)
+ToggleKnob.Position = RUDim2.new(1, -12, 0.5, 0)
 ToggleKnob.Size = fromOffset(18, 18)
 ToggleKnob.Parent = SaveToggle
 corner(ToggleKnob, 9)
 
-local BottomRow = Instance.new("Frame")
+local BottomRow = RInstance.new("Frame")
 BottomRow.BackgroundTransparency = 1
 BottomRow.Position = fromOffset(0, 314)
-BottomRow.Size = UDim2.new(1, 0, 0, 38)
+BottomRow.Size = RUDim2.new(1, 0, 0, 38)
 BottomRow.Parent = Content
 
-local DiscordButton = button(BottomRow, "Discord", "COPY DISCORD", fromOffset(0, 0), UDim2.new(0.5, -5, 1, 0), rgb(27, 31, 46))
+local DiscordButton = button(BottomRow, "Discord", "COPY DISCORD", fromOffset(0, 0), RUDim2.new(0.5, -5, 1, 0), rgb(27, 31, 46))
 DiscordButton.TextColor3 = rgb(181, 190, 255)
-local ResetButton = button(BottomRow, "Reset", "RESET KEY", UDim2.new(0.5, 5, 0, 0), UDim2.new(0.5, -5, 1, 0), rgb(45, 25, 35))
+local ResetButton = button(BottomRow, "Reset", "RESET KEY", RUDim2.new(0.5, 5, 0, 0), RUDim2.new(0.5, -5, 1, 0), rgb(45, 25, 35))
 ResetButton.TextColor3 = rgb(255, 151, 173)
 
 local saveEnabled = true
@@ -485,7 +555,7 @@ local NON_REKEY_CODES = {
     RATE_LIMITED = true
 }
 
-local Mask = label(InputHolder, "", KeyBox.Position, KeyBox.Size, Enum.Font.Code, 12, COLORS.Text)
+local Mask = label(InputHolder, "", KeyBox.Position, KeyBox.Size, REnum.Font.Code, 12, COLORS.Text)
 Mask.Visible = false
 Mask.ZIndex = KeyBox.ZIndex + 1
 
@@ -526,11 +596,11 @@ end
 
 local function setSaveEnabled(value)
     saveEnabled = value
-    TweenService:Create(SaveToggle, TweenInfo.new(0.18), {
+    TweenService:Create(SaveToggle, RTweenInfo.new(0.18), {
         BackgroundColor3 = value and COLORS.Purple or rgb(47, 53, 69)
     }):Play()
-    TweenService:Create(ToggleKnob, TweenInfo.new(0.18, Enum.EasingStyle.Quart), {
-        Position = value and UDim2.new(1, -12, 0.5, 0) or UDim2.new(0, 12, 0.5, 0)
+    TweenService:Create(ToggleKnob, RTweenInfo.new(0.18, REnum.EasingStyle.Quart), {
+        Position = value and RUDim2.new(1, -12, 0.5, 0) or RUDim2.new(0, 12, 0.5, 0)
     }):Play()
     setStatus(value and "Auto-login enabled" or "Key will not be saved", "idle")
 end
@@ -722,7 +792,7 @@ local function showKeyGui(message, state)
     Sidebar.Visible = true
     Content.Visible = true
     Header.Position = fromOffset(152, 0)
-    Header.Size = UDim2.new(1, -152, 0, 70)
+    Header.Size = RUDim2.new(1, -152, 0, 70)
     Main.Size = fromOffset(560, 440)
     MinimizeButton.Text = "—"
     minimized = false
@@ -898,13 +968,13 @@ end
 
 KeyBox:GetPropertyChangedSignal("Text"):Connect(updateMask)
 KeyBox.Focused:Connect(function()
-    TweenService:Create(inputStroke, TweenInfo.new(0.15), {
+    TweenService:Create(inputStroke, RTweenInfo.new(0.15), {
         Color = COLORS.Purple,
         Transparency = 0
     }):Play()
 end)
 KeyBox.FocusLost:Connect(function(enterPressed)
-    TweenService:Create(inputStroke, TweenInfo.new(0.15), {
+    TweenService:Create(inputStroke, RTweenInfo.new(0.15), {
         Color = COLORS.Border,
         Transparency = 0.2
     }):Play()
@@ -968,9 +1038,9 @@ MinimizeButton.MouseButton1Click:Connect(function()
     Sidebar.Visible = not minimized
     Content.Visible = not minimized
     Header.Position = minimized and fromOffset(0, 0) or fromOffset(152, 0)
-    Header.Size = minimized and UDim2.new(1, 0, 0, 70) or UDim2.new(1, -152, 0, 70)
+    Header.Size = minimized and RUDim2.new(1, 0, 0, 70) or RUDim2.new(1, -152, 0, 70)
     MinimizeButton.Text = minimized and "+" or "—"
-    TweenService:Create(Main, TweenInfo.new(0.2, Enum.EasingStyle.Quart), {
+    TweenService:Create(Main, RTweenInfo.new(0.2, REnum.EasingStyle.Quart), {
         Size = minimized and fromOffset(408, 74) or fromOffset(560, 440)
     }):Play()
 end)
@@ -1001,8 +1071,8 @@ local dragStart
 local startPosition
 
 Header.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch
+    if input.UserInputType == REnum.UserInputType.MouseButton1
+        or input.UserInputType == REnum.UserInputType.Touch
     then
         dragging = true
         dragStart = input.Position
