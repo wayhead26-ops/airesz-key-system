@@ -1,0 +1,77 @@
+name: Temporary Roblox auth diagnostics v6.1.3
+
+on:
+  push:
+    branches:
+      - fix/roblox-auth-invalid-json-diagnostics-v6.1.3
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-compile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: fix/roblox-auth-invalid-json-diagnostics-v6.1.3
+          fetch-depth: 0
+
+      - name: Patch safe auth response diagnostics
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('examples/roblox-client.lua')
+          text = path.read_text()
+
+          def must_replace(old, new, count=1):
+              global text
+              found = text.count(old)
+              if found < count:
+                  raise SystemExit(f'Expected at least {count} occurrence(s), found {found}: {old[:120]!r}')
+              text = text.replace(old, new, count)
+
+          must_replace(
+              '-- Airesz Roblox Client PREMIUM entitlement fix v6.1.2',
+              '-- Airesz Roblox Client auth diagnostics + PREMIUM entitlement v6.1.3'
+          )
+          must_replace('local CLIENT_VERSION = "6.1.2"', 'local CLIENT_VERSION = "6.1.3"')
+
+          old = '''local function requestJson(path, payload)\n    local requestFn = getRequestFunction()\n    assert(requestFn, "This environment does not provide an HTTP request function.")\n\n    local response = requestFn({\n        Url = WORKER_URL .. path,\n        Method = "POST",\n        Headers = { ["Content-Type"] = "application/json" },\n        Body = callMethod(HttpService, "JSONEncode", payload)\n    })\n\n    local decoded = {}\n    local ok = pcall(function()\n        decoded = callMethod(HttpService, "JSONDecode", response.Body or "{}")\n    end)\n    if not ok then\n        decoded = { error = "The authorization server returned invalid JSON." }\n    end\n\n    return tonumber(response.StatusCode) or 0, decoded\nend'''
+
+          new = '''local function getResponseField(response, names)\n    if type(response) ~= "table" then\n        return nil\n    end\n\n    for _, name in ipairs(names) do\n        local ok, value = pcall(function()\n            return response[name]\n        end)\n        if ok and value ~= nil then\n            return value\n        end\n    end\n\n    return nil\nend\n\nlocal function getResponseHeader(response, wantedName)\n    local headers = getResponseField(response, {"Headers", "headers"})\n    if type(headers) ~= "table" then\n        return nil\n    end\n\n    local wanted = string.lower(tostring(wantedName or ""))\n    for name, value in pairs(headers) do\n        if string.lower(tostring(name)) == wanted then\n            return tostring(value)\n        end\n    end\n\n    return nil\nend\n\nlocal function sanitizeDiagnosticText(value)\n    local text = tostring(value or "")\n    text = text:gsub("[\\r\\n\\t]+", " ")\n    text = text:gsub("AIRESZ%-%S+", "AIRESZ-[REDACTED]")\n    text = text:gsub("[Bb]earer%s+[%w%._%-]+", "Bearer [REDACTED]")\n    text = text:gsub('\"sessionToken\"%s*:%s*\"[^\"]+\"', '\"sessionToken\":\"[REDACTED]\"')\n    text = text:gsub('\"key\"%s*:%s*\"[^\"]+\"', '\"key\":\"[REDACTED]\"')\n    text = text:gsub("^%s+", ""):gsub("%s+$", "")\n\n    if #text > 160 then\n        text = string.sub(text, 1, 160) .. "..."\n    end\n\n    return text\nend\n\nlocal function requestJson(path, payload)\n    local requestFn = getRequestFunction()\n    assert(requestFn, "This environment does not provide an HTTP request function.")\n\n    local response = requestFn({\n        Url = WORKER_URL .. path,\n        Method = "POST",\n        Headers = { ["Content-Type"] = "application/json" },\n        Body = callMethod(HttpService, "JSONEncode", payload)\n    })\n\n    local responseType = type(response)\n    local body\n    local statusCode = 0\n\n    if responseType == "table" then\n        body = getResponseField(response, {\n            "Body", "body", "ResponseBody", "responseBody", "Data", "data"\n        })\n        statusCode = tonumber(getResponseField(response, {\n            "StatusCode", "status_code", "Status", "status", "Code", "code"\n        })) or 0\n    elseif responseType == "string" then\n        -- A few executors return the response body directly rather than a table.\n        body = response\n        statusCode = 200\n    end\n\n    if body == nil then\n        body = ""\n    elseif type(body) ~= "string" then\n        body = tostring(body)\n    end\n\n    local decoded = {}\n    local decodeOk = false\n    if body ~= "" then\n        decodeOk = pcall(function()\n            decoded = callMethod(HttpService, "JSONDecode", body)\n        end)\n    end\n\n    if not decodeOk or type(decoded) ~= "table" then\n        local contentType = getResponseHeader(response, "content-type") or "unknown"\n        local preview = sanitizeDiagnosticText(body)\n        if preview == "" then\n            preview = "<empty body>"\n        end\n\n        decoded = {\n            error = "Authorization server returned invalid JSON "\n                .. "(HTTP " .. tostring(statusCode)\n                .. ", content-type " .. tostring(contentType)\n                .. ", response " .. tostring(responseType)\n                .. "). Preview: " .. preview,\n            code = "INVALID_JSON_RESPONSE",\n            diagnostic = {\n                httpStatus = statusCode,\n                contentType = contentType,\n                responseType = responseType,\n                bodyPreview = preview\n            }\n        }\n    end\n\n    return statusCode, decoded\nend'''
+
+          must_replace(old, new)
+          path.write_text(text)
+          PY
+
+      - name: Validate expected diagnostic markers
+        shell: bash
+        run: |
+          grep -F 'INVALID_JSON_RESPONSE' examples/roblox-client.lua
+          grep -F 'AIRESZ-[REDACTED]' examples/roblox-client.lua
+          grep -F 'local CLIENT_VERSION = "6.1.3"' examples/roblox-client.lua
+
+      - name: Download official Luau 0.735
+        shell: bash
+        run: |
+          curl -L --fail --retry 3 -o /tmp/luau.zip https://github.com/luau-lang/luau/releases/download/0.735/luau-ubuntu.zip
+          unzip -q /tmp/luau.zip -d /tmp/luau
+          chmod +x /tmp/luau/luau-compile
+
+      - name: Compile roblox-client.lua
+        shell: bash
+        run: /tmp/luau/luau-compile examples/roblox-client.lua > /dev/null
+
+      - name: Commit verified patch and remove temporary workflow
+        shell: bash
+        run: |
+          rm .github/workflows/_temporary_auth_diag_v613.yml
+          git config user.name "wayhead26-ops"
+          git config user.email "wayhead26@gmail.com"
+          git add examples/roblox-client.lua .github/workflows/_temporary_auth_diag_v613.yml
+          git commit -m "Improve Roblox auth invalid JSON diagnostics v6.1.3"
+          git push origin HEAD:fix/roblox-auth-invalid-json-diagnostics-v6.1.3
