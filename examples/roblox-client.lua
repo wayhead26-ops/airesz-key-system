@@ -1,4 +1,4 @@
--- Airesz Roblox Client PREMIUM entitlement fix v6.1.2
+-- Airesz Roblox Client auth diagnostics + PREMIUM entitlement v6.1.3
 -- Fixes: Chat shows Premium but Premium game toggles say "Premium Required".
 -- Premium access is sourced from Worker `premium=true` and refreshed on heartbeat.
 -- Airesz v3.9.0 authorization client:
@@ -44,7 +44,7 @@ end
 local HttpService = getServiceCompat("HttpService")
 local Players = getServiceCompat("Players")
 local player = Players.LocalPlayer
-local CLIENT_VERSION = "6.1.2"
+local CLIENT_VERSION = "6.1.3"
 local EXECUTION_ID = callMethod(HttpService, "GenerateGUID", false)
 
 local function getRequestFunction()
@@ -71,6 +71,55 @@ local function getHwid()
     return "roblox-user-" .. tostring(player.UserId)
 end
 
+local function getResponseField(response, names)
+    if type(response) ~= "table" then
+        return nil
+    end
+
+    for _, name in ipairs(names) do
+        local ok, value = pcall(function()
+            return response[name]
+        end)
+        if ok and value ~= nil then
+            return value
+        end
+    end
+
+    return nil
+end
+
+local function getResponseHeader(response, wantedName)
+    local headers = getResponseField(response, {"Headers", "headers"})
+    if type(headers) ~= "table" then
+        return nil
+    end
+
+    local wanted = string.lower(tostring(wantedName or ""))
+    for name, value in pairs(headers) do
+        if string.lower(tostring(name)) == wanted then
+            return tostring(value)
+        end
+    end
+
+    return nil
+end
+
+local function sanitizeDiagnosticText(value)
+    local text = tostring(value or "")
+    text = text:gsub("[\r\n\t]+", " ")
+    text = text:gsub("AIRESZ%-%S+", "AIRESZ-[REDACTED]")
+    text = text:gsub("[Bb]earer%s+[%w%._%-]+", "Bearer [REDACTED]")
+    text = text:gsub('"sessionToken"%s*:%s*"[^"]+"', '"sessionToken":"[REDACTED]"')
+    text = text:gsub('"key"%s*:%s*"[^"]+"', '"key":"[REDACTED]"')
+    text = text:gsub("^%s+", ""):gsub("%s+$", "")
+
+    if #text > 160 then
+        text = string.sub(text, 1, 160) .. "..."
+    end
+
+    return text
+end
+
 local function requestJson(path, payload)
     local requestFn = getRequestFunction()
     assert(requestFn, "This environment does not provide an HTTP request function.")
@@ -82,15 +131,61 @@ local function requestJson(path, payload)
         Body = callMethod(HttpService, "JSONEncode", payload)
     })
 
-    local decoded = {}
-    local ok = pcall(function()
-        decoded = callMethod(HttpService, "JSONDecode", response.Body or "{}")
-    end)
-    if not ok then
-        decoded = { error = "The authorization server returned invalid JSON." }
+    local responseType = type(response)
+    local body
+    local statusCode = 0
+
+    if responseType == "table" then
+        body = getResponseField(response, {
+            "Body", "body", "ResponseBody", "responseBody", "Data", "data"
+        })
+        statusCode = tonumber(getResponseField(response, {
+            "StatusCode", "status_code", "Status", "status", "Code", "code"
+        })) or 0
+    elseif responseType == "string" then
+        -- A few executors return the response body directly rather than a table.
+        body = response
+        statusCode = 200
     end
 
-    return tonumber(response.StatusCode) or 0, decoded
+    if body == nil then
+        body = ""
+    elseif type(body) ~= "string" then
+        body = tostring(body)
+    end
+
+    local decoded = {}
+    local decodeOk = false
+    if body ~= "" then
+        decodeOk = pcall(function()
+            decoded = callMethod(HttpService, "JSONDecode", body)
+        end)
+    end
+
+    if not decodeOk or type(decoded) ~= "table" then
+        local contentType = getResponseHeader(response, "content-type") or "unknown"
+        local preview = sanitizeDiagnosticText(body)
+        if preview == "" then
+            preview = "<empty body>"
+        end
+
+        decoded = {
+            error = "Authorization server returned invalid JSON "
+                .. "(HTTP " .. tostring(statusCode)
+                .. ", content-type " .. tostring(contentType)
+                .. ", response " .. tostring(responseType)
+                .. "). Preview: " .. preview,
+            code = "INVALID_JSON_RESPONSE",
+            diagnostic = {
+                httpStatus = statusCode,
+                contentType = contentType,
+                responseType = responseType,
+                bodyPreview = preview
+            }
+        }
+    end
+
+    return statusCode, decoded
 end
 
 local function identityPayload()
