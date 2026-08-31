@@ -127,9 +127,9 @@ function renderKeyHistoryCard(item) {
       : isFreeKey
         ? `<span>HWID Reset: ${remainingResets == null ? "—" : remainingResets}/1 free reset · shared across Web/App/Discord · account-wide 6h cooldown</span>`
         : `<span>HWID Reset: ${remainingResets == null ? "—" : remainingResets} remaining · shared across Web/App/Discord · account-wide 6h cooldown</span>`;
-  const keyTitle = item.source === "giveaway" ? "Giveaway Key" : item.plan ? `${item.plan} Key` : "Airesz Key";
+  const keyTitle = item.source === "giveaway" ? "Giveaway Key" : item.plan ? `${item.plan} Key` : "Access Key";
   return `<article class="key-history-card ${cls} ${item.source === "giveaway" ? "giveaway" : ""}">
-    <div class="key-history-top"><div><span class="key-state-pill ${cls}">${label}</span>${item.premium ? '<span class="premium-chip">💎 PREMIUM</span>' : ""}<strong>${keyTitle}</strong></div><span class="key-history-time">${item.expiresAt == null ? "Lifetime" : remainingText(item.expiresAt)}</span></div>
+    <div class="key-history-top"><div><span class="key-state-pill ${cls}">${label}</span>${item.premium ? '<span class="premium-chip">PREMIUM</span>' : ""}<strong>${keyTitle}</strong></div><span class="key-history-time">${item.expiresAt == null ? "Lifetime" : remainingText(item.expiresAt)}</span></div>
     <code>${canCopy ? escapeHtml(item.key) : escapeHtml(keyText || "Unknown key")}</code>
     <div class="key-history-meta"><span>Issued ${item.issuedAt ? new Date(Number(item.issuedAt) * 1000).toLocaleString() : "—"}</span><span>${item.expiresAt == null ? "No expiry" : `Expires ${new Date(Number(item.expiresAt) * 1000).toLocaleString()}`}</span>${resetMeta}</div>
     <div class="key-history-actions">${action}</div>
@@ -242,7 +242,7 @@ async function recoverKey() {
       </div>
       <code>${escapeHtml(data.key.key)}</code>
       <div class="recover-result-meta">
-        <span>${escapeHtml(data.key.plan || "Airesz Key")} · ${escapeHtml(remaining)}</span>
+        <span>${escapeHtml(data.key.plan || "Access Key")} · ${escapeHtml(remaining)}</span>
         <span>${escapeHtml(expiry)}</span>
       </div>
       <button class="key-history-copy recover-copy-button" type="button" data-key="${encodeURIComponent(data.key.key)}">Copy Key</button>
@@ -304,8 +304,8 @@ async function loadCommerceConfig() {
       if (small) small.textContent = available ? premiumPriceText : "Coming soon";
       if (button.id === "pricingPremiumBtn") {
         button.textContent = available
-          ? `💎 Upgrade to Premium · ${premiumPriceText}`
-          : "💎 Premium Upgrade · Coming soon";
+          ? `Upgrade to Premium · ${premiumPriceText}`
+          : "Premium Upgrade · Coming soon";
       }
     });
 
@@ -325,9 +325,9 @@ async function loadCommerceConfig() {
       button.disabled = !available;
       button.classList.toggle("is-ready", available);
       if (available) {
-        button.textContent = `✨ Lifetime + Premium · ${bundlePriceText}`;
+        button.textContent = `Lifetime + Premium · ${bundlePriceText}`;
       } else {
-        button.textContent = "✨ Lifetime + Premium · Coming soon";
+        button.textContent = "Lifetime + Premium · Coming soon";
       }
     });
   } catch (error) {
@@ -377,8 +377,8 @@ async function copySiteLoadstring(button = null) {
       button.textContent = "Copied ✓";
       setTimeout(() => { button.textContent = "Get Script"; }, 1600);
     }
-    showToast("Airesz loadstring copied ✓", true);
-    setMessage("Airesz loadstring copied.", true);
+    showToast("Script loader copied ✓", true);
+    setMessage("Script loader copied.", true);
     return true;
   }
   showToast("Clipboard permission was blocked.", false);
@@ -468,8 +468,8 @@ function openGameModal(game) {
   const premiumAvailable = game.premiumAvailable === true || premiumFeatures.length > 0;
   const premiumColumn = premiumAvailable
     ? `<div class="feature-column premium-column">
-        <h3>💎 ${escapeHtml(game.premiumLabel || "Premium Features")}</h3>
-        ${premiumFeatures.map((feature) => `<span>💎 ${escapeHtml(feature)}</span>`).join("")}
+        <h3>${escapeHtml(game.premiumLabel || "Premium Features")}</h3>
+        ${premiumFeatures.map((feature) => `<span>${escapeHtml(feature)}</span>`).join("")}
         ${game.premiumMore ? '<small class="premium-modal-more">+ more Premium features available in-game</small>' : ""}
       </div>`
     : "";
@@ -490,8 +490,8 @@ function openGameModal(game) {
   $("#gameModalDescription").textContent = game.maintenance
     ? (game.maintenanceMessage || "This game is currently under maintenance.")
     : premiumAvailable
-      ? "Airesz script ready for this game with Standard access and additional Premium features."
-      : "Airesz script ready for this game with cloud verification and automatic updates.";
+      ? "Script access is ready for this game, with optional Premium features."
+      : "Script access is ready for this game with cloud verification and automatic updates.";
   const statusNode = $("#gameModalStatus");
   statusNode.className = `game-status ${statusClass}`;
   statusNode.innerHTML = `<i></i>${status}`;
@@ -565,7 +565,7 @@ function renderGames() {
     const premiumHighlights = premiumFeatures.slice(0, 4);
     const premiumBanner = premiumAvailable
       ? `<div class="game-premium-banner">
-          <div class="game-premium-heading"><span>💎</span><div><strong>${escapeHtml(game.premiumLabel || "PREMIUM AVAILABLE")}</strong><small>Extra intelligence and automation tools</small></div></div>
+          <div class="game-premium-heading"><div><strong>${escapeHtml(game.premiumLabel || "PREMIUM AVAILABLE")}</strong><small>Additional features are available</small></div></div>
           <div class="game-premium-highlights">${premiumHighlights.map((feature) => `<span>${escapeHtml(feature)}</span>`).join("")}</div>
           ${(game.premiumMore || premiumFeatures.length > premiumHighlights.length) ? '<div class="game-premium-more">+ more Premium features</div>' : ""}
         </div>`
@@ -574,7 +574,7 @@ function renderGames() {
     const payload = encodeURIComponent(JSON.stringify(game));
     return `<article class="game-card ${premiumAvailable ? "has-premium" : ""}" data-game-id="${gameId}">
       <button class="game-cover-button" type="button" data-game-view="${payload}" aria-label="View ${escapeHtml(game.name)}">
-        <div class="game-cover"><img src="${escapeHtml(icon)}" data-place-thumb="${escapeHtml(placeId)}" alt="${escapeHtml(game.name)} thumbnail" loading="lazy"><span class="game-status ${statusClass}"><i></i>${status}</span>${premiumAvailable ? '<span class="game-premium-cover-badge">💎 PREMIUM</span>' : ""}</div>
+        <div class="game-cover"><img src="${escapeHtml(icon)}" data-place-thumb="${escapeHtml(placeId)}" alt="${escapeHtml(game.name)} thumbnail" loading="lazy"><span class="game-status ${statusClass}"><i></i>${status}</span>${premiumAvailable ? '<span class="game-premium-cover-badge">PREMIUM</span>' : ""}</div>
       </button>
       <div class="game-card-body"><div class="game-card-title"><div><span class="game-place">Roblox Game</span><h3>${escapeHtml(game.name)}</h3></div><span class="game-version">${version}</span></div>
       <div class="game-feature-list">${standardFeatures.map((feature) => `<span>✓ ${escapeHtml(feature)}</span>`).join("")}</div>
@@ -715,7 +715,7 @@ async function logoutDiscord() {
 }
 
 async function logoutAllDiscordDevices() {
-  if (!confirm("Logout this Discord account from every Airesz Key System browser?")) return;
+  if (!confirm("Logout this Discord account from every Key System browser?")) return;
   try {
     await api("/api/auth/discord/logout-all", { method: "POST", body: {} });
     state.discordToken = "";
@@ -1186,7 +1186,7 @@ $("#discordLogoutAllBtn")?.addEventListener("click", logoutAllDiscordDevices);
 async function startProductCheckout(product = "LIFETIME") {
   const normalized = String(product || "LIFETIME").toUpperCase();
   if (!["LIFETIME", "PREMIUM", "BUNDLE"].includes(normalized)) {
-    setMessage("Unknown Airesz product.");
+    setMessage("Unknown access product.");
     return;
   }
 

@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#080511">
-  <meta name="description" content="Airesz free script key system with Linkvertise, Work.ink, and LootLabs checkpoints.">
-  <title>Airesz Script Hub</title>
-  <link rel="icon" href="assets/airesz-mark.png">
+  <meta name="theme-color" content="#f5f7fb">
+  <meta name="description" content="Simple key access portal with checkpoint providers, account linking, and access plans.">
+  <title>Key System</title>
   <link rel="stylesheet" href="styles.css?v=3.14.0">
   <link rel="stylesheet" href="discord-login.css?v=3.13.1">
   <link rel="stylesheet" href="purple-dashboard.css?v=3.17.0">
   <link rel="stylesheet" href="game-premium.css?v=3.24.0">
+  <link rel="stylesheet" href="clean-ui.css?v=1.0.0">
 </head>
 <body>
   <div class="page-glow glow-a"></div>
@@ -18,9 +18,8 @@
   <div class="grid-overlay"></div>
 
   <header class="topbar shell">
-    <a class="brand" href="#home" aria-label="Airesz home">
-      <img src="assets/airesz-mark.png" alt="Airesz logo">
-      <span><strong>AIRESZ</strong><small>SCRIPT HUB</small></span>
+    <a class="brand" href="#home" aria-label="Key System home">
+      <span><strong>Key System</strong></span>
     </a>
     <nav aria-label="Main navigation">
       <a href="#home">Home</a>
@@ -41,13 +40,13 @@
     <section id="home" class="hero">
       <div class="hero-copy">
         <div id="globalMaintenancePill" class="pill"><span class="status-dot"></span> All Systems Online</div>
-        <h1>Scripts that feel <span class="gradient-word">premium.</span><br>Access that stays simple.</h1>
-        <p>Browse every supported game, grab a free key, or unlock Lifetime and Premium access without making the main script experience complicated.</p>
+        <h1>Get access.<br><span class="gradient-word">Keep it simple.</span></h1>
+        <p>Choose a game, generate a temporary key, or manage longer access from one simple place.</p>
         <div class="hero-actions"><button id="heroGetScriptBtn" class="primary-button hero-cta" type="button">Get Script <span>→</span></button><a class="secondary-button hero-cta" href="#get-key">Get Key</a><a class="text-button" href="#pricing">View Access Plans</a></div>
         <div class="hero-badges">
-          <article><span>🛡</span><div><strong>HWID Protected</strong><small>Secure device binding</small></div></article>
-          <article><span>⚡</span><div><strong>Free + Lifetime</strong><small>Choose what fits you</small></div></article>
-          <article><span>☁</span><div><strong>Cloud Verified</strong><small>Cloudflare Worker + D1</small></div></article>
+          <article><span>✓</span><div><strong>Device Protected</strong><small>Secure device binding</small></div></article>
+          <article><span>✓</span><div><strong>Flexible Access</strong><small>Temporary or lifetime</small></div></article>
+          <article><span>✓</span><div><strong>Cloud Verified</strong><small>Fast key verification</small></div></article>
         </div>
       </div>
       <div class="hero-mark" aria-hidden="true">
@@ -77,14 +76,14 @@
 
 
     <section id="games" class="games-section shell">
-      <div class="section-kicker-row"><div><div class="section-label">SUPPORTED GAMES</div><h2>Pick a game. See what Airesz has ready.</h2><p>Game status, version and feature highlights are loaded from your Airesz control plane.</p></div><div class="games-tools"><input id="gameSearch" type="search" placeholder="Search games..." autocomplete="off"><select id="gameFilter"><option value="all">All games</option><option value="online">Online</option><option value="maintenance">Maintenance</option></select></div></div>
+      <div class="section-kicker-row"><div><div class="section-label">SUPPORTED GAMES</div><h2>Choose a supported game.</h2><p>View status, version, and available features.</p></div><div class="games-tools"><input id="gameSearch" type="search" placeholder="Search games..." autocomplete="off"><select id="gameFilter"><option value="all">All games</option><option value="online">Online</option><option value="maintenance">Maintenance</option></select></div></div>
       <div id="gamesGrid" class="games-grid"><div class="game-loading">Loading supported games…</div></div>
     </section>
 
     <section id="get-key" class="key-builder shell">
       <article class="builder-card">
         <div class="card-heading">
-          <span class="heading-icon">♛</span>
+          <span class="heading-icon">K</span>
           <div><h2>Choose Your Access Plan</h2><p>Select how long you need access.</p></div>
         </div>
 
@@ -137,11 +136,11 @@
       </article>
 
       <aside class="info-card access-stack">
-        <div class="lifetime-kicker"><span>✦</span> DIRECT ACCESS</div>
-        <div class="mini-brand"><img src="assets/airesz-mark.png" alt=""><div><strong>LIFETIME & PREMIUM</strong><span>ONE-TIME PURCHASES</span></div></div>
+        <div class="lifetime-kicker">DIRECT ACCESS</div>
+        <div class="mini-brand"><div><strong>LONG-TERM ACCESS</strong><span>ONE-TIME PURCHASE OPTIONS</span></div></div>
         <div class="access-mini-grid">
           <article class="access-mini lifetime-mini"><span>🔑</span><div><strong>Lifetime</strong><small>Permanent Standard key · $5</small></div></article>
-          <article class="access-mini premium-mini"><span>💎</span><div><strong>Premium Upgrade</strong><small>Existing Lifetime users · $2.99</small></div></article>
+          <article class="access-mini premium-mini"><span>+</span><div><strong>Premium Upgrade</strong><small>Existing Lifetime users · $2.99</small></div></article>
         </div>
         <div class="route-summary">
           <div><span>Lifetime</span><strong>$5 · No expiry</strong></div>
@@ -153,8 +152,8 @@
         </div>
         <div class="lifetime-actions pricing-actions">
           <button id="buyLifetimeBtn" class="primary-button lifetime-buy-button" data-product="LIFETIME" type="button">🔑 Buy Lifetime · $5</button>
-          <button id="buyPremiumBtn" class="premium-buy-button" data-product="PREMIUM" type="button">💎 Premium Upgrade <small>$2.99 USD</small></button>
-          <button class="premium-buy-button" data-product="BUNDLE" type="button">✨ Lifetime + Premium · $7.99 USD</button>
+          <button id="buyPremiumBtn" class="premium-buy-button" data-product="PREMIUM" type="button">Premium Upgrade <small>$2.99 USD</small></button>
+          <button class="premium-buy-button" data-product="BUNDLE" type="button">Lifetime + Premium · $7.99 USD</button>
           <a id="manualSupportLink" class="secondary-button" target="_blank" rel="noopener noreferrer">Contact Admin</a>
         </div>
       </aside>
@@ -167,7 +166,7 @@
       <div class="pricing-grid">
         <article class="pricing-card free-card"><div class="pricing-icon">⚡</div><span class="pricing-badge">FREE</span><h3>Get Key</h3><p>Use the normal checkpoint route to generate temporary access.</p><ul><li>24 / 48 / 72 hour routes</li><li>Supported game access</li><li>HWID protection</li><li>Discord login optional</li></ul><a class="secondary-button" href="#get-key">Get Free Key</a></article>
         <article class="pricing-card lifetime-card"><div class="pricing-icon">🔑</div><span class="pricing-badge">BEST VALUE</span><h3>Lifetime</h3><div class="pricing-price">$5 <small>USD</small></div><p>One-time purchase for permanent key access.</p><ul><li>Lifetime key</li><li>No expiry</li><li>Discord-linked recovery</li><li>Existing flow stays unchanged</li></ul><button class="lifetime-buy-button" data-product="LIFETIME" type="button">Buy Lifetime</button></article>
-        <article class="pricing-card premium-card"><div class="pricing-icon">💎</div><span class="pricing-badge premium-badge">PREMIUM</span><h3>Premium Upgrade</h3><div id="premiumPrice" class="pricing-price">$2.99 <small>USD</small></div><p>For users who already own an active Lifetime key. Upgrades the same key — no second key is created.</p><ul><li>Requires active Lifetime</li><li>Premium-only functions</li><li>Advanced / experimental tools</li><li>Premium Discord role</li></ul><button id="pricingPremiumBtn" class="premium-buy-button" data-product="PREMIUM" type="button">💎 Upgrade to Premium · $2.99</button><button class="secondary-button" data-product="BUNDLE" type="button">✨ New user? Lifetime + Premium · $7.99</button></article>
+        <article class="pricing-card premium-card"><div class="pricing-icon">+</div><span class="pricing-badge premium-badge">PREMIUM</span><h3>Premium Upgrade</h3><div id="premiumPrice" class="pricing-price">$2.99 <small>USD</small></div><p>For users who already own an active Lifetime key. Upgrades the same key — no second key is created.</p><ul><li>Requires active Lifetime</li><li>Premium-only functions</li><li>Advanced / experimental tools</li><li>Premium Discord role</li></ul><button id="pricingPremiumBtn" class="premium-buy-button" data-product="PREMIUM" type="button">Upgrade to Premium · $2.99</button><button class="secondary-button" data-product="BUNDLE" type="button">New user? Lifetime + Premium · $7.99</button></article>
       </div>
     </section>
     <div id="gameModal" class="game-modal hidden" aria-hidden="true">
@@ -177,7 +176,7 @@
         <div class="game-modal-banner"><img id="gameModalImage" src="assets/airesz-mark.png" alt=""><span id="gameModalStatus" class="game-status online"><i></i>Supported</span></div>
         <div class="game-modal-content">
           <div class="game-modal-head"><div><span class="game-place">Roblox Game</span><h2 id="gameModalTitle">Game</h2></div><span id="gameModalVersion" class="game-version">Ready</span></div>
-          <p id="gameModalDescription" class="game-modal-description">Airesz script ready for this game.</p>
+          <p id="gameModalDescription" class="game-modal-description">Script access is available for this game.</p>
           <div id="gameModalFeatures" class="game-modal-features"></div>
           <div class="game-modal-actions">
             <button id="gameModalScriptBtn" class="primary-button" type="button">Copy Get Script</button>
@@ -218,7 +217,7 @@
       </div>
     </section>
 
-    <div id="maintenanceBanner" class="maintenance-banner shell hidden"><strong>🔧 Airesz is under maintenance</strong><span id="maintenanceBannerMessage">Existing key time is paused and will resume automatically when service is restored.</span></div>
+    <div id="maintenanceBanner" class="maintenance-banner shell hidden"><strong>System maintenance</strong><span id="maintenanceBannerMessage">Existing key time is paused and will resume automatically when service is restored.</span></div>
 
     <section id="status" class="status-strip shell">
       <div><span class="status-dot"></span><strong>System Online</strong><small>Cloudflare API available</small></div>
@@ -228,7 +227,7 @@
     </section>
   </main>
 
-  <footer class="shell"><span>© 2026 Airesz. All rights reserved.</span><span>Games · Keys · Lifetime · Premium · Discord</span></footer>
+  <footer class="shell"><span>© 2026 Key System</span><span>Games · Keys · Access · Discord</span></footer>
 
   <script>
     // Linkvertise can return to this fixed GitHub Pages target with ?hash=... .
@@ -242,6 +241,6 @@
     })();
   </script>
   <script src="config.js?v=3.16.0"></script>
-  <script src="app.js?v=3.16.0"></script>
+  <script src="app.js?v=3.25.0"></script>
 </body>
 </html>
